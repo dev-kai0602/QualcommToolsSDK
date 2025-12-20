@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from edlclient.edl import main as Edl
+from edlclient.edl import EDL as Edl
 
 EDL_ARGS = {
     "--debugmode": False,
@@ -49,7 +49,7 @@ EDL_ARGS = {
     "<xmlstring>": None,
 }
 
-class edl_api():
+class edl_api:
     def __init__(self, args: dict = EDL_ARGS):
         self.edl = None
         self.status = 0

@@ -424,11 +424,17 @@ class ColorFormatter(logging.Formatter):
 
 
 class LogBase(type):
+    """ LogBase 元类
+
+    Args:
+        *args: 参数
+
+    """
     debuglevel = logging.root.level
 
     def __init__(cls, *args):
         super().__init__(*args)
-        logger_attribute_name = '_' + cls.__name__ + '__logger'
+        logger_attribute_name = '_logger'
         logger_debuglevel_name = '_' + cls.__name__ + '__debuglevel'
         logger_name = '.'.join([c.__name__ for c in cls.mro()[-2::-1]])
         LOG_CONFIG = {

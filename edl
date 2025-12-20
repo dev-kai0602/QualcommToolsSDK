@@ -134,8 +134,6 @@ import subprocess
 import sys
 import time
 
-from docopt import docopt
-
 from edlclient.Config.usb_ids import default_ids
 from edlclient.Library.Connection.seriallib import serial_class
 from edlclient.Library.Connection.usblib import usb_class
@@ -146,21 +144,39 @@ from edlclient.Library.streaming import Streaming
 from edlclient.Library.streaming_client import streaming_client
 from edlclient.Library.utils import LogBase
 from edlclient.Library.utils import is_windows
+from ...Tools import null
 
-args = docopt(__doc__, version='3')
+class EDL(metaclass=LogBase):
+    """ EDL类
 
-print("Qualcomm Sahara / Firehose Client V3.62 (c) B.Kerler 2018-2025.")
+    Args:
+        args: 参数
+        imported (bool) = True: 状态为独立运行(True)/模块导入(False)
+        enabled_log (bool) = True: 是否开启日志功能
+        enabled_print (bool) = False: 是否输出到屏幕上
 
+    """
 
-class main(metaclass=LogBase):
-    def __init__(self, args, imported: str = ''):
+    def __init__(self, args, imported: bool = True, enabled_log: bool = False, enabled_print: bool = False):
+        super().__init__()
+
+        if enabled_log:
+            self.__logger = self._logger
+            self.info = self.__logger.info
+            self.debug = self.__logger.debug
+            self.error = self.__logger.error
+            self.warning = self.__logger.warning
+        else:
+            ...
+
+        if imported:
+            self.imported = True
+        else:
+            self.imported = False
+
+        self.enabled_log = enabled_log
         self.serial = None
         self.portname = None
-        self.__logger = self.__logger
-        self.info = self.__logger.info
-        self.debug = self.__logger.debug
-        self.error = self.__logger.error
-        self.warning = self.__logger.warning
         self.cdc = None
         self.sahara = None
         self.vid = None
@@ -168,11 +184,6 @@ class main(metaclass=LogBase):
         self.serial_number = None
         self.args = args
         self.fh = None
-
-        if imported == '':
-            self.imported = True
-        else:
-            self.imported = False
 
     def parse_cmd(self, rargs):
         if self.imported:
@@ -402,12 +413,3 @@ class main(metaclass=LogBase):
                         return self.exit(1)
                 else:
                     return self.exit(1)
-
-
-if __name__ == '__main__':
-    base = main(args, __name__)
-    try:
-        base.run()
-    except KeyboardInterrupt:
-        print("\n[!] Exiting cleanly…")
-        sys.exit(0)
