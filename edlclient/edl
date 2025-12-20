@@ -134,17 +134,20 @@ import subprocess
 import sys
 import time
 
-from edlclient.Config.usb_ids import default_ids
-from edlclient.Library.Connection.seriallib import serial_class
-from edlclient.Library.Connection.usblib import usb_class
-from edlclient.Library.firehose_client import firehose_client
-from edlclient.Library.sahara import sahara
-from edlclient.Library.sahara_defs import cmd_t, sahara_mode_t
-from edlclient.Library.streaming import Streaming
-from edlclient.Library.streaming_client import streaming_client
-from edlclient.Library.utils import LogBase
-from edlclient.Library.utils import is_windows
-from ...Tools import null
+from Config.usb_ids import default_ids
+from Library.Connection.seriallib import serial_class
+from Library.Connection.usblib import usb_class
+from Library.firehose_client import firehose_client
+from Library.sahara import sahara
+from Library.sahara_defs import cmd_t, sahara_mode_t
+from Library.streaming import Streaming
+from Library.streaming_client import streaming_client
+from Library.utils import LogBase
+from Library.utils import is_windows
+from Tools import null
+
+old_print = print
+print = null.null_print
 
 class EDL(metaclass=LogBase):
     """ EDL类
@@ -158,7 +161,6 @@ class EDL(metaclass=LogBase):
     """
 
     def __init__(self, args, imported: bool = True, enabled_log: bool = False, enabled_print: bool = False):
-        super().__init__()
 
         if enabled_log:
             self.__logger = self._logger
@@ -167,13 +169,18 @@ class EDL(metaclass=LogBase):
             self.error = self.__logger.error
             self.warning = self.__logger.warning
         else:
-            ...
+            self.__logger = null.null_function
+            self.info = null.null_function
+            self.debug = null.null_function
+            self.error = null.null_function
+            self.warning = null.null_function
 
-        if imported:
-            self.imported = True
-        else:
-            self.imported = False
+        if not enabled_print:
+            global print
+            print = old_print
 
+        self.enabled_print = enabled_print
+        self.imported = imported
         self.enabled_log = enabled_log
         self.serial = None
         self.portname = None
@@ -185,36 +192,68 @@ class EDL(metaclass=LogBase):
         self.args = args
         self.fh = None
 
-    def parse_cmd(self, rargs):
-        if self.imported:
-            return ""
+    def parse_cmd(self, unresolved_args: dict) -> list:
+        """ 解析指令
 
+        Args:
+            unresolved_args (dict): 未解析命令
+
+        Return:
+            list: 结果
+
+        """
+        if self.imported:
+            return []
+
+        parsed_cmd = []
         cmds = ["server", "printgpt", "gpt", "r", "rl", "rf", "rs", "w", "wl", "wf", "ws", "e", "es", "ep", "footer",
                 "peek", "peekhex", "peekdword", "peekqword", "memtbl", "poke", "pokehex", "pokedword", "pokeqword",
                 "memcpy", "secureboot", "pbl", "qfp", "getstorageinfo", "setbootablestoragedrive", "getactiveslot",
                 "setactiveslot",
                 "send", "xml", "rawxml", "reset", "nop", "modules", "memorydump", "provision", "qfil"]
         for cmd in cmds:
-            if rargs[cmd]:
-                return cmd
-        return ""
+            if unresolved_args[cmd]:
+                parsed_cmd.append(cmd)
+
+        return parsed_cmd
 
 
-    def console_cmd(self, cmd):
-        read = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, close_fds=True)
-        try:
-            output = read.stdout.read().decode('utf-8')
-        except:
-            output = read.stdout.read().decode("ISO-8859-1")
+    def console(self, cmd):
+        """ 执行控制台命令
+
+        Args:
+            cmd: 控制台命令
+
+        Return:
+            str: 控制台执行后的输出
+
+        """
+        if self.enabled_print:
+            process = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.STDOUT,
+                                       stderr=subprocess.STDOUT, text=True, close_fds=True)
+        else:
+            process = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, close_fds=True)
+
+        output, _ = process.communicate()
         return output
 
+    @staticmethod
+    def parse_option(unresolved_options: dict) -> dict:
+        """ 解析选项
 
-    def parse_option(self, rargs):
+        Args:
+            unresolved_options (dict): 选项
+
+        Return:
+            dict: 包含 '--' 或 '<', '>' 的选项
+
+        """
+
         options = {}
-        for arg in rargs:
+        for arg in unresolved_options:
             if "--" in arg or "<" in arg:
-                options[arg] = rargs[arg]
+                options[arg] = unresolved_options[arg]
         return options
 
     def doconnect(self, loop) -> dict:
@@ -262,7 +301,7 @@ class EDL(metaclass=LogBase):
 
     def run(self):
         if is_windows():
-            proper_driver = self.console_cmd(r'reg query HKLM\HARDWARE\DEVICEMAP\SERIALCOMM')
+            proper_driver = self.console(r'reg query HKLM\HARDWARE\DEVICEMAP\SERIALCOMM')
             if re.findall(r'QCUSB', str(proper_driver)):
                 self.warning(f'Please first install libusb_win32 driver from Zadig')
 
@@ -413,3 +452,6 @@ class EDL(metaclass=LogBase):
                         return self.exit(1)
                 else:
                     return self.exit(1)
+
+if __name__ == "__main__":
+    edl = EDL('test')

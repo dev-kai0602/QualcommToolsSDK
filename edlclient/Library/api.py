@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from edlclient.edl import EDL as Edl
+from edl import EDL as Edl
 
 EDL_ARGS = {
     "--debugmode": False,

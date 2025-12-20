@@ -16,7 +16,7 @@ def null_function(*args, **kwargs):
     return null_function
 
 
-def print(*args, **kwargs) -> None:
+def null_print(*args, **kwargs) -> None:
     """ 自定义print函数，用于替换旧代码中的print函数，阻止输出
 
     Args:
