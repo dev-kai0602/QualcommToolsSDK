@@ -146,9 +146,6 @@ from Library.utils import LogBase
 from Library.utils import is_windows
 from Tools import null
 
-old_print = print
-print = null.null_print
-
 class EDL(metaclass=LogBase):
     """ EDL类
 
@@ -169,15 +166,11 @@ class EDL(metaclass=LogBase):
             self.error = self.__logger.error
             self.warning = self.__logger.warning
         else:
-            self.__logger = null.null_function
+            self.__logger = null.NullObject()
             self.info = null.null_function
             self.debug = null.null_function
             self.error = null.null_function
             self.warning = null.null_function
-
-        if not enabled_print:
-            global print
-            print = old_print
 
         self.enabled_print = enabled_print
         self.imported = imported
@@ -191,6 +184,47 @@ class EDL(metaclass=LogBase):
         self.serial_number = None
         self.args = args
         self.fh = None
+
+    def _print(self, *args, sep=' ', end='\n', file=sys.stdout, flush=False) -> None:
+        """ 自定义输出函数，根据enabled_print来决定是否输出
+
+        Args:
+            *args: 输出内容
+            sep = ' ': 分隔符
+            end = '\n': 结尾符
+            file = sys.stdout: 输出目标
+            flush = False: 是否强制刷新缓冲区
+
+        """
+
+        if self.enabled_print:
+            print(*args, sep=sep, end=end, file=file, flush=flush)
+
+    def _stdout_write(self, text: str) -> int:
+        """ sys.stdout.write函数改进版，根据enabled_print来决定是否输出
+
+        Args:
+            text (str): 文本
+
+        Returns:
+            int: 返回状态码
+
+        """
+
+        status = 0
+        if self.enabled_print:
+            status = sys.stdout.write(text)
+        return status
+
+    def _stdout_flush(self) -> None:
+        """ sys.stdout.flush函数改进版，根据enabled_print来决定是否输出
+
+        Returns:
+            None
+
+        """
+        if self.enabled_print:
+            sys.stdout.flush()
 
     def parse_cmd(self, unresolved_args: dict) -> list:
         """ 解析指令
@@ -216,7 +250,6 @@ class EDL(metaclass=LogBase):
                 parsed_cmd.append(cmd)
 
         return parsed_cmd
-
 
     def console(self, cmd):
         """ 执行控制台命令
@@ -256,25 +289,36 @@ class EDL(metaclass=LogBase):
                 options[arg] = unresolved_options[arg]
         return options
 
-    def doconnect(self, loop) -> dict:
+    def do_connect(self, loop: int) -> dict:
+        """ 连接设备
+
+        Args:
+            loop (int): 最大尝试次数
+
+        Return:
+            dict: 连接成功返回设备信息字典，失败返回 {"mode": "error"}
+
+        """
+
         while not self.cdc.connected:
             self.cdc.connected = self.cdc.connect(portname=self.portname)
             if not self.cdc.connected:
-                sys.stdout.write('.')
+                self._stdout_write('.')
+
                 if loop == 5:
-                    sys.stdout.write('\n')
+                    self._stdout_write('\n')
                     self.info("Hint:   Press and hold vol up+dwn, connect usb. For some, only use vol up.")
                     self.info("Xiaomi: Press and hold vol dwn + pwr, in fastboot mode connect usb.\n" +
                               "        Run \"./fastpwn oem edl\".")
                     self.info("Other:  Run \"adb reboot edl\".")
-                    sys.stdout.write('\n')
+                    self._stdout_write('\n')
 
                 if loop >= 20:
-                    sys.stdout.write('\n')
+                    self._stdout_write('\n')
                     loop = 6
                 loop += 1
                 time.sleep(1)
-                sys.stdout.flush()
+                self._stdout_flush()
             else:
                 self.info("Device detected :)")
                 try:
@@ -290,7 +334,18 @@ class EDL(metaclass=LogBase):
                     return resp
         return {"mode": "error"}
 
-    def exit(self, status: int = 0, cdc_close: bool = True):
+    def exit(self, status: int = 0, cdc_close: bool = True) -> None | int:
+        """ 提供可控的退出机制
+
+        Args:
+            status (int) = 0: 退出状态码
+            cdc_close (bool) = True: 是否关闭 CDC 连接
+
+        Return:
+            None | int: 如果是导入模式返回状态码，否则无返回（调用系统退出）
+
+        """
+
         if cdc_close:
             self.cdc.close()
 
@@ -300,6 +355,9 @@ class EDL(metaclass=LogBase):
             sys.exit(status)
 
     def run(self):
+        """ 主执行方法，处理EDL设备连接、协议协商和命令执行
+        """
+
         if is_windows():
             proper_driver = self.console(r'reg query HKLM\HARDWARE\DEVICEMAP\SERIALCOMM')
             if re.findall(r'QCUSB', str(proper_driver)):
@@ -309,11 +367,13 @@ class EDL(metaclass=LogBase):
         vid = int(self.args["--vid"], 16)
         pid = int(self.args["--pid"], 16)
         interface = -1
+
         if vid != -1 and pid != -1:
             portconfig = [[vid, pid, interface]]
         else:
             portconfig = default_ids
-        if self.args["--debugmode"]:
+
+        if self.args["--debugmode"] and self.enabled_log:
             logfilename = "log.txt"
             if os.path.exists(logfilename):
                 os.remove(logfilename)
@@ -327,11 +387,13 @@ class EDL(metaclass=LogBase):
             self.serial = True
         else:
             self.serial = False
+
         if self.args["--portname"]:
             self.portname = self.args["--portname"]
             self.serial = True
         else:
             self.portname = ""
+
         if self.serial:
             self.cdc = serial_class(loglevel=self.__logger.level, portconfig=portconfig)
         else:
@@ -351,28 +413,29 @@ class EDL(metaclass=LogBase):
 
         self.info("Waiting for the device")
         self.cdc.timeout = 1500
-        conninfo = self.doconnect(loop)
-        mode = conninfo["mode"]
+        connect_info = self.do_connect(loop)
+        mode = connect_info["mode"]
         try:
-            version = conninfo.get("data").version
+            version = connect_info.get("data").version
         except AttributeError:
             version = 2
+
         if mode == "sahara":
-            cmd = conninfo["cmd"]
+            cmd = connect_info["cmd"]
             if cmd == cmd_t.SAHARA_HELLO_REQ:
-                if "data" in conninfo:
-                    data = conninfo["data"]
+                if "data" in connect_info:
+                    data = connect_info["data"]
                     if data.mode == sahara_mode_t.SAHARA_MODE_MEMORY_DEBUG:
                         if self.args["memorydump"] or self.cdc.pid == 0x900E:
                             time.sleep(0.5)
-                            print("Device is in memory dump mode, dumping memory")
+                            self._print("Device is in memory dump mode, dumping memory")
                             if self.args["--partitions"]:
                                 self.sahara.debug_mode(self.args["--partitions"].split(","), version=version)
                             else:
                                 self.sahara.debug_mode(version=version)
                             return self.exit()
                         else:
-                            print("Device is in streaming mode, uploading loader")
+                            self._print("Device is in streaming mode, uploading loader")
                             self.cdc.timeout = None
                             sahara_info = self.sahara.streaminginfo()
                             if sahara_info:
@@ -392,7 +455,7 @@ class EDL(metaclass=LogBase):
                                     if "load_" in mode:
                                         time.sleep(0.3)
                                     else:
-                                        print("Error, couldn't find suitable enprg/nprg loader :(")
+                                        self._print("Error, couldn't find suitable enprg/nprg loader :(")
                                         return self.exit()
                     else:
                         sahara_info = self.sahara.cmd_info(version=version)
@@ -404,14 +467,14 @@ class EDL(metaclass=LogBase):
                             if mode == "sahara":
                                 mode = self.sahara.upload_loader(version=version)
                         else:
-                            print("Error on sahara handshake, resetting.")
+                            self._print("Error on sahara handshake, resetting.")
                             self.sahara.cmd_reset()
                             return self.exit(1)
         else:
             if self.__logger.level != logging.DEBUG:
                 self.__logger.setLevel(logging.ERROR)
         if mode == "error":
-            print("Connection detected, quiting.")
+            self._print("Connection detected, quiting.")
             return self.exit(1)
         elif mode == "firehose":
             if "enprg" in self.sahara.programmer.lower():
@@ -421,13 +484,13 @@ class EDL(metaclass=LogBase):
             if mode != "firehose":
                 streaming = Streaming(self.cdc, self.sahara, self.__logger.level)
                 if streaming.connect(1):
-                    print("Successfully uploaded programmer :)")
+                    self._print("Successfully uploaded programmer :)")
                     mode = "nandprg"
                 else:
-                    print("No suitable loader found :(")
+                    self._print("No suitable loader found :(")
                     return self.exit()
         if mode != "firehose":
-            sc = streaming_client(self.args, self.cdc, self.sahara, self.__logger.level, print)
+            sc = streaming_client(self.args, self.cdc, self.sahara, self.__logger.level, self._print)
             cmd = self.parse_cmd(self.args)
             options = self.parse_option(self.args)
             if "load_" in mode:
@@ -441,7 +504,7 @@ class EDL(metaclass=LogBase):
             if cmd == 'provision':
                 self.args["--memory"] = 'ufs'
                 self.args["--skipstorageinit"] = 1
-            self.fh = firehose_client(self.args, self.cdc, self.sahara, self.__logger.level, print)
+            self.fh = firehose_client(self.args, self.cdc, self.sahara, self.__logger.level, self._print)
             options = self.parse_option(self.args)
             if cmd != "" or self.imported:
                 self.info("Trying to connect to firehose loader ...")

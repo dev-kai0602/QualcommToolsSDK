@@ -2,6 +2,49 @@
 
 """
 
+class NullObject:
+    """ 空类
+
+    Args:
+        *args: 参数
+        **kwargs: 参数
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.level = ''
+
+    def FileHandler(self, *args, **kwargs) -> None:
+        """ 空方法
+
+        Args:
+            *args: 参数
+            **kwargs: 参数
+
+        """
+        pass
+
+    def addHandler(self, *args, **kwargs) -> None:
+        """ 空方法
+
+        Args:
+            *args: 参数
+            **kwargs: 参数
+
+        """
+        pass
+
+    def setLevel(self, *args, **kwargs) -> None:
+        """ 空方法
+
+        Args:
+            *args: 参数
+            **kwargs: 参数
+
+        """
+        pass
+
+
 def null_function(*args, **kwargs):
     """ 空函数，会接收值但不做任何处理
 
