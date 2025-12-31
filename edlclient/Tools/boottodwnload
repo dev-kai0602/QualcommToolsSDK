@@ -125,7 +125,7 @@ class connection(metaclass=LogBase):
                     print(f"Detected a {vendortable[device.vid][0]} device with pid {hex(device.pid)} in Diag mode")
                     print("Sending download mode command")
                     interface = 5
-                    diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x413c, 0x81d7, interface]])
+                    diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[0x413c, 0x81d7, interface]])
                     if diag.connect():
                         data = diag.hdlc.receive_reply()
                         res = diag.send(b"\x4b\x65\x01\x00")
@@ -230,7 +230,7 @@ class dwnloadtools(metaclass=LogBase):
                 elif info["vendor"] == "Quectel":
                     print("Sending download mode command")
                     interface = 0
-                    diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x2c7c, 0x0125, interface]])
+                    diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[0x2c7c, 0x0125, interface]])
                     if diag.connect():
                         diag.hdlc.receive_reply()
                         res = diag.send(b"\x4b\x65\x01\x00")
@@ -239,7 +239,7 @@ class dwnloadtools(metaclass=LogBase):
                 elif info["vendor"] == "Telit":
                     print("Sending download mode command")
                     interface = 0
-                    diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x2c7c, 0x0125, interface]])
+                    diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[0x2c7c, 0x0125, interface]])
                     if diag.connect():
                         diag.hdlc.receive_reply()
                         res = diag.send(b"\x4b\x65\x01\x00")
@@ -248,7 +248,7 @@ class dwnloadtools(metaclass=LogBase):
                 elif info["vendor"] == "ZTE":
                     print("Sending download mode command")
                     interface = 0
-                    diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
+                    diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[0x19d2, 0x0016, interface]])
                     if diag.connect():
                         diag.hdlc.receive_reply()
                         res = diag.send(b"\x4b\x65\x01\x00")

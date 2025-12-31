@@ -643,7 +643,7 @@ def main(args):
             print("Usage: ./sierrakeygen.py [-l,-m,-c] [challenge] -d [devicegeneration]")
             print("Example: ./sierrakeygen.py -l BE96CBBEE0829BCA -d MDM9200")
             print("or: ./sierrakeygen.py -u for auto unlock")
-            print("or: ./sierrakeygen.py -u -p [portname] for auto unlock with given portname")
+            print("or: ./sierrakeygen.py -u -p [port_name] for auto unlock with given port_name")
             print("or: ./sierrakeygen.py -s for self-test")
             print("Supported devicegenerations :")
             for key in infotable:

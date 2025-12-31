@@ -534,7 +534,7 @@ class adbtools(metaclass=LogBase):
                 return True
             else:
                 interface = 0
-                diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
+                diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[0x19d2, 0x0016, interface]])
                 if self.qc_diag_auth(diag):
                     res = diag.send(b"\x4B\xFA\x0B\x00\x01")  # Enable adb serial
                     if res[0] != 0x13:
@@ -549,7 +549,7 @@ class adbtools(metaclass=LogBase):
                 return True
             else:
                 interface = 0
-                diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
+                diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[0x19d2, 0x0016, interface]])
                 if self.qc_diag_auth(diag):
                     res = diag.send(b"\x4B\xFA\x0B\x00\x00")  # Enable adb serial
                     if res[0] != 0x13:

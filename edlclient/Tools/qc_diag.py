@@ -15,30 +15,13 @@ import os, sys
 
 from struct import unpack, pack
 from binascii import hexlify, unhexlify
-import null
 
-# 原来的导入方式
-# current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-# parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# sys.path.insert(0, parent_dir)
-# try:
-#     from Library.utils import print_progress, read_object, write_object, LogBase
-#     from Library.Connection.usblib import usb_class
-#     from Library.Connection.seriallib import serial_class
-#     from Library.hdlc import hdlc
-#     from Config.usb_ids import default_diag_vid_pid
-# except ImportError:
-#     from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
-#     from edlclient.Library.Connection.usblib import usb_class
-#     from edlclient.Library.Connection.seriallib import serial_class
-#     from edlclient.Library.hdlc import hdlc
-#     from edlclient.Config.usb_ids import default_diag_vid_pid
-
-from Library.utils import print_progress, read_object, write_object, LogBase
-from Library.Connection.usblib import usb_class
-from Library.Connection.seriallib import serial_class
-from Library.hdlc import hdlc
-from Config.usb_ids import default_diag_vid_pid
+from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
+from edlclient.Library.Connection.usblib import usb_class
+from edlclient.Library.Connection.seriallib import serial_class
+from edlclient.Library.hdlc import hdlc
+from edlclient.Config.usb_ids import default_diag_vid_pid
+from edlclient.Tools import null
 
 errors = {
     1: "None",
@@ -102,14 +85,14 @@ class FactImageReadInfo:
     """
     用于表示从FactImage读取的信息的类。
 
-    Args:
+    Attributes:
         stream_state (int): 流状态，0 表示没有更多数据要发送，否则设置为 1。
         info_cluster_sent (int): 信息簇是否已发送，0 表示未发送，否则为 1。
         cluster_map_seqno (int): 簇映射页的序列号。
         cluster_data_seqno (int): 簇数据页的序列号。
-        
+
     """
-    def_fs_factimage_read_info = [
+    fs_factimage_read_info = [
         ("stream_state", "B"),  # 0 indicates no more data to be sent, otherwise set to 1
         ("info_cluster_sent", "B"),  # 0 indicates if info_cluster was not sent, else 1
         ("cluster_map_seqno", "H"),  # Sequence number of cluster map pages
@@ -117,12 +100,22 @@ class FactImageReadInfo:
     ]
 
     def __init__(self, stream_state: int, info_cluster_sent: int, cluster_map_seqno: int, cluster_data_seqno: int):
+        """
+        用于表示从FactImage读取的信息的类。
+
+        Args:
+            stream_state (int): 流状态，0 表示没有更多数据要发送，否则设置为 1。
+            info_cluster_sent (int): 信息簇是否已发送，0 表示未发送，否则为 1。
+            cluster_map_seqno (int): 簇映射页的序列号。
+            cluster_data_seqno (int): 簇数据页的序列号。
+
+        """
         self.stream_state = stream_state
         self.info_cluster_sent = info_cluster_sent
         self.cluster_map_seqno = cluster_map_seqno
         self.cluster_data_seqno = cluster_data_seqno
 
-    def analysis_data(self, data: bytes):
+    def from_data(self, data: bytes):
         """
         从二进制数据中解析 FactImageReadInfo 对象。
 
@@ -130,7 +123,7 @@ class FactImageReadInfo:
             data (bytes): 包含 FactImageReadInfo 数据的二进制数据。
             
         """
-        tmp = read_object(data[0:0x10], self.def_fs_factimage_read_info)
+        tmp = read_object(data[0:0x10], self.fs_factimage_read_info)
         self.stream_state = tmp["stream_state"]
         self.info_cluster_sent = tmp["info_cluster_sent"]
         self.cluster_map_seqno = tmp["cluster_map_seqno"]
@@ -144,13 +137,29 @@ class FactImageReadInfo:
             bytes: 表示 FactImageReadInfo 对象的二进制数据。
             
         """
-        data = write_object(self.def_fs_factimage_read_info, self.stream_state, self.info_cluster_sent,
+        data = write_object(self.fs_factimage_read_info, self.stream_state, self.info_cluster_sent,
                             self.cluster_map_seqno, self.cluster_data_seqno)
         return data
 
 
 class FactoryHeader:
-    def_factory_header = [
+    """
+    工厂镜像头部信息解析与封装类，用于处理设备存储（如EFS分区）中工厂镜像的元数据。
+
+    Attributes:
+        magic1 (int): 头部魔术值1，用于验证头部合法性
+        magic2 (int): 头部魔术值2，用于验证头部合法性
+        fact_version (int): 集群版本号（2字节无符号整数）
+        version (int): 超级块版本号（2字节无符号整数）
+        block_size (int): 每块包含的页数（4字节无符号整数）
+        page_size (int): 页大小（字节，4字节无符号整数）
+        block_count (int): 设备总块数（4字节无符号整数）
+        space_limit (int): 已使用的总页数（定义映射表大小，4字节无符号整数）
+        upper_data (list): 32个整数组成的列表，存储额外数据
+
+    """
+
+    factory_header = [
         ("magic1", "I"),
         ("magic2", "I"),
         ("fact_version", "H"),  # Version of this cluster
@@ -174,8 +183,15 @@ class FactoryHeader:
         self.space_limit = 0
         self.upper_data = [0 * 32]
 
-    def fromdata(self, data):
-        tmp = read_object(data[0:0x9C], self.def_factory_header)
+    def from_data(self, data):
+        """
+        从二进制数据中解析出FactoryHeader对象。
+
+        Args:
+            data (bytes): 二进制数据
+
+        """
+        tmp = read_object(data[0:0x9C], self.factory_header)
         self.magic1 = tmp["magic1"]
         self.magic2 = tmp["magic2"]
         self.fact_version = tmp["fact_version"]
@@ -186,20 +202,48 @@ class FactoryHeader:
         self.space_limit = tmp["space_limit"]
         self.upper_data = tmp["upper_data"]
 
-    def todata(self):
-        data = write_object(self.magic1, self.magic2, self.fact_version, self.version, self.block_size, self.page_size,
-                            self.block_count, self.space_limit, self.upper_data)
+    def to_data(self):
+        """
+        将FactoryHeader对象转换为二进制数据。
+
+        Returns:
+            bytes: 二进制数据
+
+        """
+        data = write_object(self.magic1, self.magic2, self.fact_version, self.version, self.block_size,
+                            self.page_size, self.block_count, self.space_limit, self.upper_data)
         return data
 
 
-class nvitem:
-    item = 0x0
-    data = b""
-    status = 0x0
-    index = 0x0
-    name = ""
+class NVitem:
+    """
+    NV（Non-Volatile）项目数据封装类，用于存储和管理设备中的非易失性存储项信息。
 
-    def __init__(self, item, index, data, status, name):
+    Attributes:
+        item (int): NV项的唯一标识ID（十六进制），用于区分不同类型的NV项（如示例中nvitems.xml的id字段）
+        data (bytes): NV项的原始二进制数据，存储实际的配置或参数信息
+        status (int): NV项的状态标识（十六进制），可能表示项的有效性、读写权限等状态
+        index (int): NV项的索引，用于在同类型NV项中区分不同实例（如多个同ID的NV项可通过索引区分）
+        name (str): NV项的名称（如示例中nvitems.xml的name字段），用于直观标识NV项的用途
+
+    """
+    item: int = 0x0
+    data: bytes = b""
+    status: int = 0x0
+    index: int = 0x0
+    name: str = ""
+
+    def __init__(self, item: int, index: int, data: bytes, status: int, name: str):
+        """初始化nvitem对象，设置NV项的基本属性
+
+        Args:
+            item (int): NV项的唯一标识ID
+            index (int): NV项的索引
+            data (bytes): NV项的原始二进制数据
+            status (int): NV项的状态标识
+            name (str): NV项的名称
+
+        """
         self.item = item
         self.index = index
         self.data = data
@@ -208,6 +252,11 @@ class nvitem:
 
 
 class diag_cmds(Enum):
+    """
+    诊断命令（Diagnostic Commands）枚举类，定义了高通（Qualcomm）诊断协议中支持的命令标识符。
+
+    注：命令值采用十六进制表示，部分命令可能因设备型号或固件版本存在兼容性差异。
+    """
     DIAG_VERNO_F = 0
     DIAG_ESN_F = 1
     DIAG_PEEKB_F = 2
@@ -304,49 +353,345 @@ class diag_cmds(Enum):
 
 
 class efs_cmds(Enum):
-    EFS2_DIAG_HELLO = 0  # Parameter negotiation packet
-    EFS2_DIAG_QUERY = 1  # Send information about EFS2 params
-    EFS2_DIAG_OPEN = 2  # Open a file
-    EFS2_DIAG_CLOSE = 3  # Close a file
-    EFS2_DIAG_READ = 4  # Read a file
-    EFS2_DIAG_WRITE = 5  # Write a file
-    EFS2_DIAG_SYMLINK = 6  # Create a symbolic link
-    EFS2_DIAG_READLINK = 7  # Read a symbolic link
-    EFS2_DIAG_UNLINK = 8  # Remove a symbolic link or file
-    EFS2_DIAG_MKDIR = 9  # Create a directory
-    EFS2_DIAG_RMDIR = 10  # Remove a directory
-    EFS2_DIAG_OPENDIR = 11  # Open a directory for reading
-    EFS2_DIAG_READDIR = 12  # Read a directory
-    EFS2_DIAG_CLOSEDIR = 13  # Close an open directory
-    EFS2_DIAG_RENAME = 14  # Rename a file or directory
-    EFS2_DIAG_STAT = 15  # Obtain information about a named file
-    EFS2_DIAG_LSTAT = 16  # Obtain information about a symbolic link
-    EFS2_DIAG_FSTAT = 17  # Obtain information about a file descriptor
-    EFS2_DIAG_CHMOD = 18  # Change file permissions
-    EFS2_DIAG_STATFS = 19  # Obtain file system information
-    EFS2_DIAG_ACCESS = 20  # Check a named file for accessibility
-    EFS2_DIAG_NAND_DEV_INFO = 21  # Get NAND device info
-    EFS2_DIAG_FACT_IMAGE_START = 22  # Start data output for Factory Image
-    EFS2_DIAG_FACT_IMAGE_READ = 23  # Get data for Factory Image
-    EFS2_DIAG_FACT_IMAGE_END = 24  # End data output for Factory Image
-    EFS2_DIAG_PREP_FACT_IMAGE = 25  # Prepare file system for image dump
-    EFS2_DIAG_PUT_DEPRECATED = 26  # Write an EFS item file
-    EFS2_DIAG_GET_DEPRECATED = 27  # Read an EFS item file
-    EFS2_DIAG_ERROR = 28  # Send an EFS Error Packet back through DIAG
-    EFS2_DIAG_EXTENDED_INFO = 29  # Get Extra information.
-    EFS2_DIAG_CHOWN = 30  # Change ownership
-    EFS2_DIAG_BENCHMARK_START_TEST = 31  # Start Benchmark
-    EFS2_DIAG_BENCHMARK_GET_RESULTS = 32  # Get Benchmark Report
-    EFS2_DIAG_BENCHMARK_INIT = 33  # Init/Reset Benchmark
-    EFS2_DIAG_SET_RESERVATION = 34  # Set group reservation
-    EFS2_DIAG_SET_QUOTA = 35  # Set group quota
-    EFS2_DIAG_GET_GROUP_INFO = 36  # Retrieve Q&R values
-    EFS2_DIAG_DELTREE = 37  # Delete a Directory Tree
-    EFS2_DIAG_PUT = 38  # Write a EFS item file in order
-    EFS2_DIAG_GET = 39  # Read a EFS item file in order
-    EFS2_DIAG_TRUNCATE = 40  # Truncate a file by the name
-    EFS2_DIAG_FTRUNCATE = 41  # Truncate a file by a descriptor
-    EFS2_DIAG_STATVFS_V2 = 42  # Obtains extensive file system info
+    """
+     EFS（Embedded File System）诊断命令枚举类，定义了嵌入式文件系统交互的标准命令标识符。
+
+     注：命令值为整数标识，部分命令（如EFS2_DIAG_PUT_DEPRECATED、EFS2_DIAG_GET_DEPRECATED）已过时，
+     建议使用其替代命令（EFS2_DIAG_PUT、EFS2_DIAG_GET）。
+     """
+    # 基础交互类命令
+    EFS2_DIAG_HELLO = 0
+    """
+    参数协商数据包（Parameter negotiation packet）
+    - 功能：建立EFS诊断会话的首个命令，用于客户端与设备协商通信参数（如数据传输大小、版本兼容等）
+    - 交互逻辑：客户端发送HELLO包，设备返回支持的参数集，完成会话初始化
+    """
+
+    EFS2_DIAG_QUERY = 1
+    """
+    EFS2参数信息查询（Send information about EFS2 params）
+    - 功能：获取设备端EFS2文件系统的核心配置参数
+    - 返回内容：包括文件系统版本、块大小、页大小、最大文件数、支持的功能集等元数据
+    """
+
+    # 文件操作类命令
+    EFS2_DIAG_OPEN = 2
+    """
+    打开文件（Open a file）
+    - 功能：打开指定路径的文件/设备节点，获取文件描述符（fd）
+    - 参数：文件路径、打开模式（只读/只写/读写/追加等）、权限掩码
+    - 返回：有效文件描述符（成功）或错误码（失败，如文件不存在、权限不足）
+    """
+
+    EFS2_DIAG_CLOSE = 3
+    """
+    关闭文件（Close a file）
+    - 功能：关闭已打开的文件描述符，释放系统资源
+    - 参数：文件描述符（fd）
+    - 注意：未调用该命令可能导致文件句柄泄漏，影响后续文件操作
+    """
+
+    EFS2_DIAG_READ = 4
+    """
+    读取文件（Read a file）
+    - 功能：从已打开的文件描述符中读取指定长度的二进制数据
+    - 参数：文件描述符、读取偏移量、读取长度
+    - 返回：读取的二进制数据（成功）或空数据+错误码（失败，如偏移量越界）
+    """
+
+    EFS2_DIAG_WRITE = 5
+    """
+    写入文件（Write a file）
+    - 功能：向已打开的文件描述符写入指定二进制数据
+    - 参数：文件描述符、写入偏移量、待写入二进制数据
+    - 返回：实际写入的字节数（成功）或错误码（失败，如磁盘满、只读模式）
+    """
+
+    EFS2_DIAG_UNLINK = 8
+    """
+    删除文件/符号链接（Remove a symbolic link or file）
+    - 功能：删除指定路径的普通文件或符号链接（不支持目录删除）
+    - 参数：文件/链接路径
+    - 注意：删除前需确保文件未被打开，否则可能删除失败
+    """
+
+    EFS2_DIAG_RENAME = 14
+    """
+    重命名文件/目录（Rename a file or directory）
+    - 功能：修改文件/目录的路径或名称
+    - 参数：原路径、目标路径
+    - 注意：目标路径已存在时会覆盖（需设备端EFS支持覆盖模式）
+    """
+
+    EFS2_DIAG_TRUNCATE = 40
+    """
+    按文件名截断文件（Truncate a file by the name）
+    - 功能：将指定路径的文件截断为指定长度（长度为0则清空文件）
+    - 参数：文件路径、目标长度
+    - 区别：无需提前打开文件，直接通过路径操作
+    """
+
+    EFS2_DIAG_FTRUNCATE = 41
+    """
+    按文件描述符截断文件（Truncate a file by a descriptor）
+    - 功能：将已打开的文件截断为指定长度
+    - 参数：文件描述符、目标长度
+    - 优势：避免路径重复解析，效率高于TRUNCATE命令
+    """
+
+    # 链接操作类命令
+    EFS2_DIAG_SYMLINK = 6
+    """
+    创建符号链接（Create a symbolic link）
+    - 功能：为指定文件/目录创建软链接（符号链接）
+    - 参数：源文件路径、链接文件路径
+    - 注意：EFS2仅支持文件级符号链接，不支持目录硬链接
+    """
+
+    EFS2_DIAG_READLINK = 7
+    """
+    读取符号链接（Read a symbolic link）
+    - 功能：获取符号链接指向的原始文件/目录路径
+    - 参数：链接文件路径
+    - 返回：原始路径字符串（成功）或错误码（失败，如链接无效）
+    """
+
+    # 目录操作类命令
+    EFS2_DIAG_MKDIR = 9
+    """
+    创建目录（Create a directory）
+    - 功能：在指定路径创建单层目录
+    - 参数：目录路径、目录权限掩码
+    - 注意：父目录不存在时创建失败，需逐级创建
+    """
+
+    EFS2_DIAG_RMDIR = 10
+    """
+    删除目录（Remove a directory）
+    - 功能：删除指定的空目录
+    - 参数：目录路径
+    - 限制：目录非空时删除失败，需先删除目录内文件/子目录
+    """
+
+    EFS2_DIAG_OPENDIR = 11
+    """
+    打开目录（Open a directory for reading）
+    - 功能：打开指定目录，获取目录描述符（dd）
+    - 参数：目录路径
+    - 返回：目录描述符（成功）或错误码（失败，如目录不存在）
+    """
+
+    EFS2_DIAG_READDIR = 12
+    """
+    读取目录（Read a directory）
+    - 功能：从已打开的目录描述符中读取目录项（文件/子目录列表）
+    - 参数：目录描述符、读取偏移量
+    - 返回：目录项列表（包含名称、类型、大小等信息）
+    """
+
+    EFS2_DIAG_CLOSEDIR = 13
+    """
+    关闭目录（Close an open directory）
+    - 功能：关闭已打开的目录描述符，释放目录操作资源
+    - 参数：目录描述符
+    """
+
+    EFS2_DIAG_DELTREE = 37
+    """
+    删除目录树（Delete a Directory Tree）
+    - 功能：递归删除指定目录及其下所有文件/子目录
+    - 参数：根目录路径
+    - 注意：高危操作，执行前需确认路径正确性，避免误删系统目录
+    """
+
+    # 文件属性/权限类命令
+    EFS2_DIAG_STAT = 15
+    """
+    获取文件属性（Obtain information about a named file）
+    - 功能：通过文件路径查询文件元数据
+    - 返回：文件大小、创建时间、修改时间、权限、所有者、文件类型等
+    """
+
+    EFS2_DIAG_LSTAT = 16
+    """
+    获取符号链接属性（Obtain information about a symbolic link）
+    - 功能：查询符号链接文件本身的属性（区别于STAT：STAT会解析链接指向的文件）
+    - 返回：链接文件的元数据（而非源文件）
+    """
+
+    EFS2_DIAG_FSTAT = 17
+    """
+    获取文件描述符属性（Obtain information about a file descriptor）
+    - 功能：通过已打开的文件描述符查询文件属性
+    - 优势：无需重复解析文件路径，效率更高
+    """
+
+    EFS2_DIAG_CHMOD = 18
+    """
+    修改文件权限（Change file permissions）
+    - 功能：修改指定文件/目录的访问权限（如读/写/执行权限）
+    - 参数：文件/目录路径、新权限掩码（如0o644）
+    """
+
+    EFS2_DIAG_ACCESS = 20
+    """
+    检查文件可访问性（Check a named file for accessibility）
+    - 功能：验证当前会话是否有权限访问指定文件（读/写/执行）
+    - 参数：文件路径、访问权限类型（读/写/执行）
+    - 返回：0（有权限）或非0错误码（无权限/文件不存在）
+    """
+
+    EFS2_DIAG_CHOWN = 30
+    """
+    修改文件所有者（Change ownership）
+    - 功能：修改文件/目录的属主（UID）和属组（GID）
+    - 参数：文件路径、新UID、新GID
+    - 限制：需设备端EFS支持权限管理，且会话拥有管理员权限
+    """
+
+    # 文件系统信息类命令
+    EFS2_DIAG_STATFS = 19
+    """
+    获取文件系统基础信息（Obtain file system information）
+    - 功能：查询EFS2文件系统的整体状态
+    - 返回：总容量、已用容量、可用容量、块大小、总块数、空闲块数等
+    """
+
+    EFS2_DIAG_NAND_DEV_INFO = 21
+    """
+    获取NAND设备信息（Get NAND device info）
+    - 功能：查询底层NAND闪存设备的硬件参数
+    - 返回：页大小、块大小、坏块数、擦除次数、设备型号等
+    """
+
+    EFS2_DIAG_STATVFS_V2 = 42
+    """
+    获取文件系统扩展信息（Obtains extensive file system info）
+    - 功能：STATFS的增强版本，返回更详细的文件系统统计数据
+    - 扩展内容：inode总数/空闲数、文件最大长度、挂载标志、保留块数等
+    """
+
+    # 工厂镜像操作类命令
+    EFS2_DIAG_FACT_IMAGE_START = 22
+    """
+    启动工厂镜像数据输出（Start data output for Factory Image）
+    - 功能：初始化工厂镜像（Factory Image）的读取流程
+    - 参数：镜像分区标识、读取起始偏移
+    - 作用：通知设备准备镜像数据，为后续READ命令做准备
+    """
+
+    EFS2_DIAG_FACT_IMAGE_READ = 23
+    """
+    读取工厂镜像数据（Get data for Factory Image）
+    - 功能：分段读取工厂镜像的二进制数据
+    - 参数：读取长度
+    - 返回：镜像二进制数据块（长度≤请求长度），返回空表示读取完成
+    """
+
+    EFS2_DIAG_FACT_IMAGE_END = 24
+    """
+    结束工厂镜像数据输出（End data output for Factory Image）
+    - 功能：终止工厂镜像读取流程，释放镜像操作资源
+    - 注意：必须调用该命令，否则设备会维持镜像读取状态，影响其他操作
+    """
+
+    EFS2_DIAG_PREP_FACT_IMAGE = 25
+    """
+    准备工厂镜像导出（Prepare file system for image dump）
+    - 功能：预处理EFS文件系统，确保工厂镜像导出的完整性
+    - 操作：同步未写入磁盘的数据、锁定关键文件、检查文件系统一致性
+    """
+
+    # EFS项文件操作类命令
+    EFS2_DIAG_PUT_DEPRECATED = 26
+    """
+    写入EFS项文件（Write an EFS item file）【已废弃】
+    - 功能：早期版本的EFS项文件写入命令
+    - 替代方案：使用EFS2_DIAG_PUT（38）命令，兼容性更好
+    """
+
+    EFS2_DIAG_GET_DEPRECATED = 27
+    """
+    读取EFS项文件（Read an EFS item file）【已废弃】
+    - 功能：早期版本的EFS项文件读取命令
+    - 替代方案：使用EFS2_DIAG_GET（39）命令，支持有序读取
+    """
+
+    EFS2_DIAG_PUT = 38
+    """
+    有序写入EFS项文件（Write a EFS item file in order）
+    - 功能：按指定顺序写入EFS配置项文件（如NV参数文件）
+    - 参数：项标识、写入偏移、二进制数据
+    - 优势：相比废弃版本，支持分段有序写入，避免数据错乱
+    """
+
+    EFS2_DIAG_GET = 39
+    """
+    有序读取EFS项文件（Read a EFS item file in order）
+    - 功能：按指定顺序读取EFS配置项文件
+    - 参数：项标识、读取偏移、读取长度
+    - 优势：支持断点续读，适合大尺寸配置项读取
+    """
+
+    # 错误与扩展类命令
+    EFS2_DIAG_ERROR = 28
+    """
+    发送EFS错误数据包（Send an EFS Error Packet back through DIAG）
+    - 功能：设备端向客户端反馈EFS操作的错误信息
+    - 包含内容：错误码、错误描述、出错命令、出错参数等
+    """
+
+    EFS2_DIAG_EXTENDED_INFO = 29
+    """
+    获取扩展信息（Get Extra information）
+    - 功能：查询EFS2的扩展功能与状态信息
+    - 返回：支持的命令集、最大传输单元、错误码定义、版本补丁信息等
+    """
+
+    # 性能测试类命令
+    EFS2_DIAG_BENCHMARK_START_TEST = 31
+    """
+    启动性能测试（Start Benchmark）
+    - 功能：触发EFS2文件系统性能测试（读/写/擦除速度）
+    - 参数：测试类型（读/写）、测试数据长度、测试次数
+    """
+
+    EFS2_DIAG_BENCHMARK_GET_RESULTS = 32
+    """
+    获取性能测试结果（Get Benchmark Report）
+    - 功能：读取性能测试的统计数据
+    - 返回：平均速度、最大/最小速度、延迟、成功率等
+    """
+
+    EFS2_DIAG_BENCHMARK_INIT = 33
+    """
+    初始化/重置性能测试（Init/Reset Benchmark）
+    - 功能：重置性能测试环境，清除历史测试数据
+    - 作用：确保每次测试的独立性，避免历史数据干扰
+    """
+
+    # 配额与预留类命令
+    EFS2_DIAG_SET_RESERVATION = 34
+    """
+    设置组预留空间（Set group reservation）
+    - 功能：为指定用户组预留EFS存储空间（防止空间被占满）
+    - 参数：组ID、预留空间大小（字节）
+    """
+
+    EFS2_DIAG_SET_QUOTA = 35
+    """
+    设置组配额（Set group quota）
+    - 功能：限制指定用户组的EFS存储空间上限
+    - 参数：组ID、配额上限（字节）
+    - 注意：配额小于已使用空间时，组内无法写入新数据
+    """
+
+    EFS2_DIAG_GET_GROUP_INFO = 36
+    """
+    获取组配额/预留信息（Retrieve Q&R values）
+    - 功能：查询指定用户组的配额（Quota）和预留（Reservation）配置
+    - 返回：组ID、配额上限、已用空间、预留空间、剩余空间等
+    """
 
 
 O_RDONLY = 0
@@ -360,15 +705,38 @@ FS_DIAG_MAX_READ_REQ = 1024
 # define DIAG_NV_READ_F 0x26
 
 class QualcommDiagClient(metaclass=LogBase):
-    def __init__(self, portconfig, ep_in=-1, ep_out=-1, loglevel: int = logging.DEBUG, encoding: str = 'utf-8', enabled_print: bool = False, enabled_log: bool = False):
-        self.portconfig = portconfig
-        self.nvlist = {}
+    """
+    高通诊断客户端类，用于通过诊断协议与高通设备进行交互。
+    支持NV项读写、EFS文件系统操作、模式切换等核心功能。
+
+    """
+
+    def __init__(self, port_config, ep_in: int = -1, ep_out: int = -1, loglevel: int = logging.DEBUG,
+                 encoding: str = 'utf-8', enabled_print: bool = False, enabled_log: bool = False):
+        """
+        初始化诊断客户端
+
+        Args:
+            port_config: 端口配置信息（串口号或USB设备信息）
+            ep_in: USB输入端点编号（默认-1表示自动选择）
+            ep_out: USB输出端点编号（默认-1表示自动选择）
+            loglevel: 日志级别（默认DEBUG）
+            encoding: 编码格式（默认utf-8）
+            enabled_print: 是否启用打印输出
+            enabled_log: 是否启用日志记录
+
+        """
+        self.hdlc = None
+        self.cdc = None
+        self.port_config = port_config
+        self.nv_list = {}
         self.ep_in = ep_in
         self.ep_out = ep_out
-        self.portname = ""
+        self.port_name = ""
         self.enabled_print = enabled_print
         self.enabled_log = enabled_log
         self.encoding = encoding
+
         if self.enabled_log:
             self.__logger.setLevel(loglevel)
             
@@ -376,22 +744,47 @@ class QualcommDiagClient(metaclass=LogBase):
                 log_path = "log.txt"
                 fh = logging.FileHandler(log_path, encoding=self.encoding)
                 self.__logger.addHandler(fh)
-                
-            current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+
+        # 获取当前脚本的绝对目录
+        current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+
+        # 定义可能的nvitems.xml路径（优先检查父目录，再检查当前目录）
+        possible_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(current_dir)), "edlclient", "Config", "nvitems.xml"),
+            os.path.join(current_dir, "edlclient", "Config", "nvitems.xml")
+        ]
+
+        # 尝试从可能的路径中加载XML文件
+        for xml_path in possible_paths:
             try:
-                parent_dir = os.path.dirname(os.path.dirname(current_dir))
-                nvxml = os.path.join(parent_dir, "edlclient", "Config", "nvitems.xml")
-                e = ElementTree.parse(nvxml).getroot()
-            except:
-                current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-                nvxml = os.path.join(current_dir, "edlclient", "Config", "nvitems.xml")
-                e = ElementTree.parse(nvxml).getroot()
+                e = ElementTree.parse(xml_path).getroot()
+                break
+            except FileNotFoundError:
+                continue  # 路径不存在，尝试下一个
+            except Exception as e:
+                # 捕获XML解析等其他异常，明确错误信息
+                raise RuntimeError(f"解析XML文件失败（路径：{xml_path}）：{str(e)}")
+        else:
+            # 所有路径均未找到文件
+            raise FileNotFoundError(f"未找到nvitems.xml，尝试过的路径：{possible_paths}")
+
         for atype in e.findall("nv"):
             name = atype.get("name")
             identifier = int(atype.get("id"))
-            self.nvlist[identifier] = name
+            self.nv_list[identifier] = name
 
-    def prettyprint(self, data):
+    @staticmethod
+    def data_to_hex_ascii(data):
+        """
+        将二进制数据转换为十六进制和ASCII混合的可读格式
+
+        Args:
+            data: 二进制数据
+
+        Returns:
+            格式化的字符串
+
+        """
         recv = ""
         plain = ""
         if len(data) == 0:
@@ -411,7 +804,18 @@ class QualcommDiagClient(metaclass=LogBase):
             res += plain
         return res
 
-    def decodestatus(self, data):
+    @staticmethod
+    def decode_status(data):
+        """
+        解析状态码为可读描述
+
+        Args:
+            data: 包含状态码的响应数据
+
+        Returns:
+            状态描述字符串
+
+        """
         info = data[0]
         if info == 0x13:
             return "Invalid Command Response"
@@ -431,12 +835,22 @@ class QualcommDiagClient(metaclass=LogBase):
             return "Command accepted"
 
     def connect(self, serial: bool = False):
+        """
+        建立与设备的连接
+
+        Args:
+            serial: 是否使用串口连接（False表示USB连接）
+
+        Returns:
+            连接成功返回True，否则返回False
+
+        """
         if serial:
-            self.cdc = serial_class(loglevel=self.__logger.level, portconfig=self.portconfig)
+            self.cdc = serial_class(loglevel=self.__logger.level, portconfig=self.port_config)
         else:
-            self.cdc = usb_class(portconfig=self.portconfig, loglevel=self.__logger.level)
+            self.cdc = usb_class(portconfig=self.port_config, loglevel=self.__logger.level)
         self.hdlc = None
-        if self.cdc.connect(self.ep_in, self.ep_out, self.portname):
+        if self.cdc.connect(self.ep_in, self.ep_out, self.port_name):
             self.hdlc = hdlc(self.cdc)
             data = self.hdlc.receive_reply(timeout=0)
             return True
@@ -451,17 +865,17 @@ class QualcommDiagClient(metaclass=LogBase):
 
     def cmd_info(self):
         reply = self.send(b"\x00")
-        return self.prettyprint(reply)
+        return self.data_to_hex_ascii(reply)
 
     def enforce_crash(self):
         # ./diag.py -nvwrite 1027,01 enable adsp log NV_MDSP_MEM_DUMP_ENABLED_I
         # ./diag.py -nvwrite 4399,01 enable download on reboot NV_DETECT_HW_RESET_I
         res = self.send(b"\x4B\x25\x03\x00")
-        print(self.decodestatus(res))
+        print(self.decode_status(res))
 
     def enter_downloadmode(self):
         res = self.send(b"\x3A")
-        print(self.decodestatus(res))
+        print(self.decode_status(res))
 
     def enter_saharamode(self):
         self.hdlc.receive_reply(timeout=0)
@@ -489,7 +903,7 @@ class QualcommDiagClient(metaclass=LogBase):
             elif res[1] == 0x1:
                 print("Security Password accepted.")
         elif res[0] != 0x25:
-            print(self.decodestatus(res))
+            print(self.decode_status(res))
         return res
 
     def send_spc(self, spc="303030303030"):
@@ -502,7 +916,7 @@ class QualcommDiagClient(metaclass=LogBase):
             return
         res = self.send(b"\x41" + spc)
         if res[0] != 0x41:
-            print(self.decodestatus(res))
+            print(self.decode_status(res))
         else:
             if res[1] == 0x0:
                 print("SPC is wrong")
@@ -548,7 +962,7 @@ class QualcommDiagClient(metaclass=LogBase):
                 print(returnanswer)
                 if nvitem.status == 0:
                     print("-----------------------------------------")
-                    print(self.prettyprint(nvitem.data))
+                    print(self.data_to_hex_ascii(nvitem.data))
             else:
                 print(nvitem)
         else:
@@ -566,7 +980,7 @@ class QualcommDiagClient(metaclass=LogBase):
             print(returnanswer)
             if nvitem.status == 0:
                 print("-----------------------------------------")
-                print(self.prettyprint(nvitem.data))
+                print(self.data_to_hex_ascii(nvitem.data))
         else:
             print(nvitem)
 
@@ -621,10 +1035,10 @@ class QualcommDiagClient(metaclass=LogBase):
             if data[0] == 0x26:
                 res = read_object(data[1:], nvitem_type)
                 name = ""
-                if item in self.nvlist:
-                    name = self.nvlist[item]
+                if item in self.nv_list:
+                    name = self.nv_list[item]
                 data = self.unpackdata(res["rawdata"])
-                res = nvitem(res["item"], 0, data, res["status"], name)
+                res = NVitem(res["item"], 0, data, res["status"], name)
                 return [True, res]
             elif data[0] == 0x14:
                 return [False, f"Error 0x14 trying to read nvitem {hex(item)}."]
@@ -643,10 +1057,10 @@ class QualcommDiagClient(metaclass=LogBase):
             if data[0] == 0x4B:
                 res = read_object(data[4:], subnvitem_type)
                 name = ""
-                if item in self.nvlist:
-                    name = self.nvlist[item]
+                if item in self.nv_list:
+                    name = self.nv_list[item]
                 data = self.unpackdata(res["rawdata"])
-                res = nvitem(res["item"], index, data, res["status"], name)
+                res = NVitem(res["item"], index, data, res["status"], name)
                 return [True, res]
             elif data[0] == 0x14:
                 return [False, f"Error 0x14 trying to read nvitem {hex(item)}."]
@@ -786,8 +1200,8 @@ class QualcommDiagClient(metaclass=LogBase):
         fh = FactoryHeader()
         if len(resp) > 0:
             write_handle.write(resp[0x10:-0x1])
-            fefs.analysis_data(resp[0x8:0x10])
-            fh.fromdata(resp[0x10:0x10 + (39 * 4)])
+            fefs.from_data(resp[0x8:0x10])
+            fh.from_data(resp[0x10:0x10 + (39 * 4)])
 
         old = 0
         print_progress(0, 100, prefix="Progress:", suffix="Complete", bar_length=50)
@@ -820,11 +1234,11 @@ class QualcommDiagClient(metaclass=LogBase):
                 if dlen == 0x200 or dlen == 0x800:
                     if resp[0x0] == 0x4B:
                         write_handle.write(resp[0x10:0x10 + dlen])
-                        fefs.analysis_data(resp[0x8:0x10])
+                        fefs.from_data(resp[0x8:0x10])
                     else:
                         if (resp[0x0] == 0x13) and (resp[0x1] == 0x62) and (len(resp) > 0x200):
                             write_handle.write(resp[0x14:-4])
-                            fefs.analysis_data(resp[0xc:0x14])
+                            fefs.from_data(resp[0xc:0x14])
                             if fefs.stream_state == 0x0:
                                 break
                         else:
@@ -857,8 +1271,8 @@ class QualcommDiagClient(metaclass=LogBase):
         cmdtosend = unhexlify(cmd)
         reply = self.send(cmdtosend)
         if reply[0] != cmdtosend[0]:
-            print(self.decodestatus(reply))
-        result = self.prettyprint(reply)
+            print(self.decode_status(reply))
+        result = self.data_to_hex_ascii(reply)
         return result
 
     def efsdiagerror(self, errcode):
@@ -1197,7 +1611,7 @@ class DiagTools(metaclass=LogBase):
         except:
             self.serial = False
         try:
-            self.portname = args.portname
+            self.portname = args.port_name
         except:
             self.portname = ""
 
@@ -1239,14 +1653,14 @@ class DiagTools(metaclass=LogBase):
         connected = False
         diag = None
         if self.vid is None or self.pid is None:
-            diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=default_diag_vid_pid)
+            diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=default_diag_vid_pid)
             if self.serial:
-                diag.portname = self.portname
+                diag.port_name = self.portname
             connected = diag.connect(self.serial)
         else:
-            diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[self.vid, self.pid, self.interface]])
+            diag = QualcommDiagClient(loglevel=self.__logger.level, port_config=[[self.vid, self.pid, self.interface]])
             if self.serial:
-                diag.portname = self.portname
+                diag.port_name = self.portname
             connected = diag.connect(self.serial)
 
         if connected:
@@ -1276,20 +1690,20 @@ class DiagTools(metaclass=LogBase):
                     sys.exit()
                 print(diag.efsreadfile(args.src, args.dst))
             elif cmd == "nvread":
-                if "0x" in args.nvitem:
-                    nvitem = int(args.nvitem, 16)
+                if "0x" in args.NVitem:
+                    nvitem = int(args.NVitem, 16)
                 else:
-                    nvitem = int(args.nvitem)
+                    nvitem = int(args.NVitem)
                 diag.print_nvitem(nvitem)
             elif cmd == "nvreadsub":
-                if args.nvitem is None or args.nvindex is None:
+                if args.NVitem is None or args.nvindex is None:
                     print("Usage: nvreadsub [nvitem] [nvindex]")
                     exit(1)
                 nv = args.nvreadsub.split(",")
-                if "0x" in args.nvitem:
-                    nvitem = int(args.nvitem, 16)
+                if "0x" in args.NVitem:
+                    nvitem = int(args.NVitem, 16)
                 else:
-                    nvitem = int(args.nvitem)
+                    nvitem = int(args.NVitem)
                 if "0x" in nv[1]:
                     nvindex = int(args.nvindex, 16)
                 else:
@@ -1299,20 +1713,20 @@ class DiagTools(metaclass=LogBase):
                 if args.data is None:
                     print("NvWrite requires data to write")
                     sys.exit()
-                if "0x" in args.nvitem:
-                    nvitem = int(args.nvitem, 16)
+                if "0x" in args.NVitem:
+                    nvitem = int(args.NVitem, 16)
                 else:
-                    nvitem = int(args.nvitem)
+                    nvitem = int(args.NVitem)
                 data = unhexlify(args.data)
                 diag.write_nvitem(nvitem, data)
             elif cmd == "nvwritesub":
-                if args.nvitem is None or args.nvindex is None or args.data is None:
+                if args.NVitem is None or args.nvindex is None or args.data is None:
                     print("NvWriteSub requires item, index and data to write")
                     sys.exit()
-                if "0x" in args.nvitem:
-                    nvitem = int(args.nvitem, 16)
+                if "0x" in args.NVitem:
+                    nvitem = int(args.NVitem, 16)
                 else:
-                    nvitem = int(args.nvitem)
+                    nvitem = int(args.NVitem)
                 if "0x" in args.nvindex:
                     nvindex = int(args.nvindex, 16)
                 else:
@@ -1355,7 +1769,7 @@ def main():
     parser_info.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_info.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                              default="0")
-    parser_info.add_argument("-portname", metavar="<portname>",
+    parser_info.add_argument("-port_name", metavar="<port_name>",
                              help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_info.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_info.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1367,7 +1781,7 @@ def main():
     parser_cmd.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_cmd.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                             default="0")
-    parser_cmd.add_argument("-portname", metavar="<portname>",
+    parser_cmd.add_argument("-port_name", metavar="<port_name>",
                             help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_cmd.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_cmd.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1379,7 +1793,7 @@ def main():
     parser_sp.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_sp.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                            default="0")
-    parser_sp.add_argument("-portname", metavar="<portname>",
+    parser_sp.add_argument("-port_name", metavar="<port_name>",
                            help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_sp.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_sp.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1391,7 +1805,7 @@ def main():
     parser_spc.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_spc.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                             default="0")
-    parser_spc.add_argument("-portname", metavar="<portname>",
+    parser_spc.add_argument("-port_name", metavar="<port_name>",
                             help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_spc.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_spc.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1402,7 +1816,7 @@ def main():
     parser_nvread.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_nvread.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                default="0")
-    parser_nvread.add_argument("-portname", metavar="<portname>",
+    parser_nvread.add_argument("-port_name", metavar="<port_name>",
                                help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_nvread.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_nvread.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1414,7 +1828,7 @@ def main():
     parser_nvreadsub.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_nvreadsub.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                   default="0")
-    parser_nvreadsub.add_argument("-portname", metavar="<portname>",
+    parser_nvreadsub.add_argument("-port_name", metavar="<port_name>",
                                   help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_nvreadsub.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_nvreadsub.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1426,7 +1840,7 @@ def main():
     parser_nvwrite.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_nvwrite.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                 default="0")
-    parser_nvwrite.add_argument("-portname", metavar="<portname>",
+    parser_nvwrite.add_argument("-port_name", metavar="<port_name>",
                                 help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_nvwrite.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_nvwrite.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1439,7 +1853,7 @@ def main():
     parser_nvwritesub.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_nvwritesub.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                    default="0")
-    parser_nvwritesub.add_argument("-portname", metavar="<portname>",
+    parser_nvwritesub.add_argument("-port_name", metavar="<port_name>",
                                    help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_nvwritesub.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_nvwritesub.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1450,7 +1864,7 @@ def main():
     parser_writeimei.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_writeimei.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                   default="0")
-    parser_writeimei.add_argument("-portname", metavar="<portname>",
+    parser_writeimei.add_argument("-port_name", metavar="<port_name>",
                                   help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_writeimei.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_writeimei.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1461,7 +1875,7 @@ def main():
     parser_nvbackup.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_nvbackup.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                  default="0")
-    parser_nvbackup.add_argument("-portname", metavar="<portname>",
+    parser_nvbackup.add_argument("-port_name", metavar="<port_name>",
                                  help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_nvbackup.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_nvbackup.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1472,7 +1886,7 @@ def main():
     parser_efsread.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_efsread.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                 default="0")
-    parser_efsread.add_argument("-portname", metavar="<portname>",
+    parser_efsread.add_argument("-port_name", metavar="<port_name>",
                                 help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_efsread.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_efsread.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1484,7 +1898,7 @@ def main():
     parser_efsreadfile.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_efsreadfile.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                     default="0")
-    parser_efsreadfile.add_argument("-portname", metavar="<portname>",
+    parser_efsreadfile.add_argument("-port_name", metavar="<port_name>",
                                     help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_efsreadfile.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_efsreadfile.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1495,7 +1909,7 @@ def main():
     parser_efslistdir.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_efslistdir.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                    default="0")
-    parser_efslistdir.add_argument("-portname", metavar="<portname>",
+    parser_efslistdir.add_argument("-port_name", metavar="<port_name>",
                                    help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_efslistdir.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_efslistdir.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1505,7 +1919,7 @@ def main():
     parser_download.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_download.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                  default="0")
-    parser_download.add_argument("-portname", metavar="<portname>",
+    parser_download.add_argument("-port_name", metavar="<port_name>",
                                  help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_download.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_download.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1515,7 +1929,7 @@ def main():
     parser_sahara.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_sahara.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                                default="0")
-    parser_sahara.add_argument("-portname", metavar="<portname>",
+    parser_sahara.add_argument("-port_name", metavar="<port_name>",
                                help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_sahara.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_sahara.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")
@@ -1525,7 +1939,7 @@ def main():
     parser_crash.add_argument("-pid", metavar="<pid>", help="[Option] Specify pid", default="")
     parser_crash.add_argument("-interface", metavar="<pid>", help="[Option] Specify interface number, default=0)",
                               default="0")
-    parser_crash.add_argument("-portname", metavar="<portname>",
+    parser_crash.add_argument("-port_name", metavar="<port_name>",
                               help="[Option] Specify serial port (\"/dev/ttyUSB0\",\"COM1\")")
     parser_crash.add_argument("-serial", help="[Option] Use serial port (autodetect)", action="store_true")
     parser_crash.add_argument("-debugmode", help="[Option] Enable verbose logging", action="store_true")

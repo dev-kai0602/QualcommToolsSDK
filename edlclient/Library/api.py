@@ -18,7 +18,7 @@ EDL_ARGS = {
     "--partitionfilename": None,
     "--partitions": None,
     "--pid": "-1",
-    "--portname": None,
+    "--port_name": None,
     "--resetmode": None,
     "--sectorsize": None,
     "--serial": False,
