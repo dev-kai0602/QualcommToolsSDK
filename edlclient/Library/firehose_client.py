@@ -191,6 +191,18 @@ class firehose_client(metaclass=LogBase):
         return False
 
     def handle_firehose(self, cmd, options):
+        """
+        处理与Firehose协议相关的命令。
+
+        Args:
+            cmd (str): 要执行的命令。
+            options (dict): 命令选项。
+
+        Returns:
+            如果命令成功执行则返回True，否则返回False
+
+        """
+
         if cmd == "gpt":
             luns = self.getluns(options)
             directory = options["<directory>"]
@@ -201,25 +213,26 @@ class firehose_client(metaclass=LogBase):
                 if options["--genxml"]:
                     genxml = True
             for lun in luns:
-                sfilename = os.path.join(directory, f"gpt_main{str(lun)}.bin")
+                sfile_name = os.path.join(directory, f"gpt_main{str(lun)}.bin")
                 data, guid_gpt = self.firehose.get_gpt(lun, int(options["--gpt-num-part-entries"]),
                                                        int(options["--gpt-part-entry-size"]),
                                                        int(options["--gpt-part-entry-start-lba"]))
                 if guid_gpt is None:
                     break
-                #with open(sfilename, "wb") as write_handle:
+                #with open(sfile_name, "wb") as write_handle:
                 #    #write_handle.write(data)
                 #    pass
 
-                self.printer(f"Dumped GPT from Lun {str(lun)} to {sfilename}")
-                sfilename = os.path.join(directory, f"gpt_backup{str(lun)}.bin")
-                #with open(sfilename, "wb") as write_handle:
+                self.printer(f"Dumped GPT from Lun {str(lun)} to {sfile_name}")
+                sfile_name = os.path.join(directory, f"gpt_backup{str(lun)}.bin")
+                #with open(sfile_name, "wb") as write_handle:
                 #    #write_handle.write(data[self.firehose.cfg.SECTOR_SIZE_IN_BYTES * 2:])
                 #    pass
-                self.printer(f"Dumped Backup GPT from Lun {str(lun)} to {sfilename}")
+                self.printer(f"Dumped Backup GPT from Lun {str(lun)} to {sfile_name}")
                 if genxml:
                     guid_gpt.generate_rawprogram(lun, self.firehose.cfg.SECTOR_SIZE_IN_BYTES, directory)
             return True
+
         elif cmd == "printgpt":
             luns = self.getluns(options)
             for lun in luns:
@@ -231,6 +244,19 @@ class firehose_client(metaclass=LogBase):
                 self.printer(f"\nParsing Lun {str(lun)}:")
                 guid_gpt.print()
             return True
+
+        elif cmd == 'getgpt':
+            gpt_date = []
+            luns = self.getluns(options)
+            for lun in luns:
+                data, guid_gpt = self.firehose.get_gpt(lun, int(options["--gpt-num-part-entries"]),
+                                                       int(options["--gpt-part-entry-size"]),
+                                                       int(options["--gpt-part-entry-start-lba"]))
+                if guid_gpt is None:
+                    break
+                gpt_date.append({'lun': lun, 'date': data, 'guid_gpt': guid_gpt})
+            return gpt_date
+
         elif cmd == "r":
             if not self.check_param(["<partitionname>", "<filename>"]):
                 return False
@@ -273,6 +299,7 @@ class firehose_client(metaclass=LogBase):
                                 self.error(lun + ":\t" + rpartition)
                     return False
             return True
+
         elif cmd == "rl":
             if not self.check_param(["<directory>"]):
                 return False
@@ -302,12 +329,12 @@ class firehose_client(metaclass=LogBase):
                     storedir = directory
                 if not os.path.exists(storedir):
                     os.mkdir(storedir)
-                sfilename = os.path.join(storedir, f"gpt_main{str(lun)}.bin")
-                with open(sfilename, "wb") as write_handle:
+                sfile_name = os.path.join(storedir, f"gpt_main{str(lun)}.bin")
+                with open(sfile_name, "wb") as write_handle:
                     write_handle.write(data)
 
-                sfilename = os.path.join(storedir, f"gpt_backup{str(lun)}.bin")
-                with open(sfilename, "wb") as write_handle:
+                sfile_name = os.path.join(storedir, f"gpt_backup{str(lun)}.bin")
+                with open(sfile_name, "wb") as write_handle:
                     write_handle.write(data[self.firehose.cfg.SECTOR_SIZE_IN_BYTES * 2:])
 
                 if genxml:
@@ -329,6 +356,7 @@ class firehose_client(metaclass=LogBase):
                         self.info(f"Dumped partition {str(partition.name)} with sector count " +
                                   f"{str(partition.sectors)} as {filename}.")
             return True
+
         elif cmd == "rf":
             if not self.check_param(["<filename>"]):
                 return False
@@ -354,11 +382,11 @@ class firehose_client(metaclass=LogBase):
                                             self.cfg.total_blocks) // self.cfg.SECTOR_SIZE_IN_BYTES
 
                             if len(luns) > 1:
-                                sfilename = filename + f".lun{str(lun)}"
+                                sfile_name = filename + f".lun{str(lun)}"
                             else:
-                                sfilename = filename
+                                sfile_name = filename
                             self.printer(f"Dumping sector 0 with sector count {str(totalsectors)} as {filename}.")
-                            if self.firehose.cmd_read(lun, 0, totalsectors, sfilename):
+                            if self.firehose.cmd_read(lun, 0, totalsectors, sfile_name):
                                 self.printer(
                                     f"Dumped sector 0 with sector count {str(totalsectors)} as {filename}.")
             else:
@@ -370,19 +398,20 @@ class firehose_client(metaclass=LogBase):
                     if guid_gpt is None:
                         break
                     if len(luns) > 1:
-                        sfilename = filename + f".lun{str(lun)}"
+                        sfile_name = filename + f".lun{str(lun)}"
                         self.printer(f"Dumping lun {lun} with sector count {str(guid_gpt.totalsectors)} as {filename}.")
                     else:
-                        sfilename = filename
+                        sfile_name = filename
                         self.printer(f"Dumping flash with sector count {str(guid_gpt.totalsectors)} as {filename}.")
 
-                    if self.firehose.cmd_read(lun, 0, guid_gpt.totalsectors, sfilename):
+                    if self.firehose.cmd_read(lun, 0, guid_gpt.totalsectors, sfile_name):
                         if len(luns) > 1:
                             self.printer(f"Dumped lun {lun} with sector count " +
                                          f"{str(guid_gpt.totalsectors)} as {filename}.")
                         else:
                             self.printer(f"Dumped flash with sector count {str(guid_gpt.totalsectors)} as {filename}.")
                 return True
+
         elif cmd == "pbl":
             if not self.check_param(["<filename>"]):
                 return False
@@ -403,6 +432,7 @@ class firehose_client(metaclass=LogBase):
                     self.error("Unknown target chipset")
                 self.error("Error on dumping pbl")
             return False
+
         elif cmd == "qfp":
             if not self.check_param(["<filename>"]):
                 return False
@@ -423,6 +453,7 @@ class firehose_client(metaclass=LogBase):
                         self.error("No known qfprom offset for this chipset")
                 self.error("Error on dumping qfprom")
             return False
+
         elif cmd == "secureboot":
             if not self.check_cmd("peek"):
                 self.error("Peek command isn't supported by edl loader")
@@ -453,6 +484,7 @@ class firehose_client(metaclass=LogBase):
                 else:
                     self.error("Unknown target chipset")
                     return False
+
         elif cmd == "memtbl":
             if not self.check_param(["<filename>"]):
                 return False
@@ -473,6 +505,7 @@ class firehose_client(metaclass=LogBase):
                     self.error("Unknown target chipset")
                 self.error("Error on dumping memtbl")
             return False
+
         elif cmd == "footer":
             if not self.check_param(["<filename>"]):
                 return False
@@ -505,6 +538,7 @@ class firehose_client(metaclass=LogBase):
                                 return True
             self.error("Error: Couldn't detect footer partition.")
             return False
+
         elif cmd == "rs":
             if options["--lun"] is not None:
                 lun = int(options["--lun"])
@@ -518,6 +552,7 @@ class firehose_client(metaclass=LogBase):
             if self.firehose.cmd_read(lun, start, sectors, filename, True):
                 self.printer(f"Dumped sector {str(start)} with sector count {str(sectors)} as {filename}.")
                 return True
+
         elif cmd == "peek":
             if not self.check_param(["<offset>", "<length>", "<filename>"]):
                 return False
@@ -532,6 +567,7 @@ class firehose_client(metaclass=LogBase):
                 self.info(
                     f"Peek data from offset {hex(offset)} and length {hex(length)} was written to {filename}")
                 return True
+
         elif cmd == "peekhex":
             if not self.check_param(["<offset>", "<length>"]):
                 return False
@@ -545,6 +581,7 @@ class firehose_client(metaclass=LogBase):
                 self.printer("\n")
                 self.printer(hexlify(resp))
                 return True
+
         elif cmd == "peekqword":
             if not self.check_param(["<offset>"]):
                 return False
@@ -557,6 +594,7 @@ class firehose_client(metaclass=LogBase):
                 self.printer("\n")
                 self.printer(hex(unpack("<Q", resp[:8])[0]))
                 return True
+
         elif cmd == "peekdword":
             if not self.check_param(["<offset>"]):
                 return False
@@ -569,6 +607,7 @@ class firehose_client(metaclass=LogBase):
                 self.printer("\n")
                 self.printer(hex(unpack("<I", resp[:4])[0]))
                 return True
+
         elif cmd == "poke":
             if not self.check_param(["<offset>", "<filename>"]):
                 return False
@@ -579,6 +618,7 @@ class firehose_client(metaclass=LogBase):
                 offset = getint(options["<offset>"])
                 filename = options["<filename>"]
                 return self.firehose.cmd_poke(offset, "", filename, True)
+
         elif cmd == "pokehex":
             if not self.check_param(["<offset>", "<data>"]):
                 return False
@@ -589,6 +629,7 @@ class firehose_client(metaclass=LogBase):
                 offset = getint(options["<offset>"])
                 data = unhexlify(options["<data>"])
                 return self.firehose.cmd_poke(offset, data, "", True)
+
         elif cmd == "pokeqword":
             if not self.check_param(["<offset>", "<data>"]):
                 return False
@@ -599,6 +640,7 @@ class firehose_client(metaclass=LogBase):
                 offset = getint(options["<offset>"])
                 data = pack("<Q", getint(options["<data>"]))
                 return self.firehose.cmd_poke(offset, data, "", True)
+
         elif cmd == "pokedword":
             if not self.check_param(["<offset>", "<data>"]):
                 return False
@@ -609,6 +651,7 @@ class firehose_client(metaclass=LogBase):
                 offset = getint(options["<offset>"])
                 data = pack("<I", getint(options["<data>"]))
                 return self.firehose.cmd_poke(offset, data, "", True)
+
         elif cmd == "memcpy":
             if not self.check_param(["<offset>", "<size>"]):
                 return False
@@ -623,17 +666,20 @@ class firehose_client(metaclass=LogBase):
                     return True
                 else:
                     return False
+
         elif cmd == "reset":
             mode = "reset"
             if not self.check_param(["--resetmode"]):
                 return False
             return self.firehose.cmd_reset(options["--resetmode"])
+
         elif cmd == "nop":
             if not self.check_cmd("nop"):
                 self.error("Nop command isn't supported by edl loader")
                 return False
             else:
                 return self.firehose.cmd_nop()
+
         elif cmd == "setbootablestoragedrive":
             if not self.check_param(["<lun>"]):
                 return False
@@ -642,6 +688,7 @@ class firehose_client(metaclass=LogBase):
                 return False
             else:
                 return self.firehose.cmd_setbootablestoragedrive(int(options["<lun>"]))
+
         elif cmd == "getactiveslot":
             res = self.firehose.detect_partition(options, "boot_a", send_full=True)
             if res[0]:
@@ -667,17 +714,20 @@ class firehose_client(metaclass=LogBase):
                     return True
             self.error("Can't detect active slot. Please make sure your device has slot A/B")
             return False
+
         elif cmd == "setactiveslot":
             if not self.check_param(["<slot>"]):
                 return False
             else:
                 return self.firehose.cmd_setactiveslot(options["<slot>"])
+
         elif cmd == "getstorageinfo":
             if not self.check_cmd("getstorageinfo"):
                 self.error("getstorageinfo command isn't supported by edl loader")
                 return False
             else:
                 return self.firehose.cmd_getstorageinfo_string()
+
         elif cmd == "w":
             if not self.check_param(["<partitionname>", "<filename>"]):
                 return False
@@ -741,6 +791,7 @@ class firehose_client(metaclass=LogBase):
                 return False
             else:
                 return True
+
         elif cmd == "wl":
             if not self.check_param(["<directory>"]):
                 return False
@@ -791,6 +842,7 @@ class firehose_client(metaclass=LogBase):
                         self.error(f"Couldn't write partition {partname}. Either wrong memorytype given or no gpt partition.")
                         return False
             return True
+
         elif cmd == "ws":
             if not self.check_param(["<start_sector>"]):
                 return False
@@ -811,6 +863,7 @@ class firehose_client(metaclass=LogBase):
             else:
                 self.error(f"Error on writing {filename} to sector {str(start)}")
                 return False
+
         elif cmd == "wf":
             if not self.check_param(["<filename>"]):
                 return False
@@ -831,6 +884,7 @@ class firehose_client(metaclass=LogBase):
             else:
                 self.error(f"Error on writing {filename} to sector {str(start)}")
                 return False
+
         elif cmd == "e":
             if not self.check_param(["<partitionname>"]):
                 return False
@@ -856,6 +910,7 @@ class firehose_client(metaclass=LogBase):
             self.error(
                 f"Couldn't erase partition {partitionname}. Either wrong memorytype given or no gpt partition.")
             return False
+
         elif cmd == "ep":
             if not self.check_param(["<partitionname>", "<sectors>"]):
                 return False
@@ -884,6 +939,7 @@ class firehose_client(metaclass=LogBase):
                     return False
             self.error(f"Error: Couldn't detect partition: {partitionname}")
             return False
+
         elif cmd == "es":
             if not self.check_param(["<start_sector>", "<sectors>"]):
                 return False
@@ -899,14 +955,17 @@ class firehose_client(metaclass=LogBase):
                 self.printer(f"Erased sector {str(start)} with sector count {str(sectors)}.")
                 return True
             return False
+
         elif cmd == "xml":
             if not self.check_param(["<xmlfile>"]):
                 return False
             return self.firehose.cmd_xml(options["<xmlfile>"])
+
         elif cmd == "rawxml":
             if not self.check_param(["<xmlstring>"]):
                 return False
             return self.firehose.cmd_rawxml(options["<xmlstring>"])
+
         elif cmd == "send":
             if not self.check_param(["<command>"]):
                 return False
@@ -915,8 +974,10 @@ class firehose_client(metaclass=LogBase):
             self.printer("\n")
             self.printer(resp)
             return True
+
         elif cmd == "server":
             return do_tcp_server(self, options, self.handle_firehose)
+
         elif cmd == "modules":
             if not self.check_param(["<command>", "<options>"]):
                 return False
@@ -927,6 +988,7 @@ class firehose_client(metaclass=LogBase):
                 return False
             else:
                 return self.firehose.modules.run(command=mcommand, args=moptions)
+
         elif cmd == "qfil":
             success = True
             self.info("[qfil] raw programming...")

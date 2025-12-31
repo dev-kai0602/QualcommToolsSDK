@@ -16,12 +16,12 @@ import serial.tools.list_ports
 from Exscript.protocols.telnetlib import Telnet
 
 try:
-    from edlclient.Tools.qc_diag import qcdiag
+    from edlclient.Tools.qc_diag import QualcommDiagClient
 except ImportError as e:
     script_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
     sys.path.insert(0, script_path)
     try:
-        from edlclient.Tools.qc_diag import qcdiag
+        from edlclient.Tools.qc_diag import QualcommDiagClient
     except ImportError as e:
         print("ImportError: %s" % e)
 
@@ -534,7 +534,7 @@ class adbtools(metaclass=LogBase):
                 return True
             else:
                 interface = 0
-                diag = qcdiag(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
+                diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
                 if self.qc_diag_auth(diag):
                     res = diag.send(b"\x4B\xFA\x0B\x00\x01")  # Enable adb serial
                     if res[0] != 0x13:
@@ -549,7 +549,7 @@ class adbtools(metaclass=LogBase):
                 return True
             else:
                 interface = 0
-                diag = qcdiag(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
+                diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[0x19d2, 0x0016, interface]])
                 if self.qc_diag_auth(diag):
                     res = diag.send(b"\x4B\xFA\x0B\x00\x00")  # Enable adb serial
                     if res[0] != 0x13:

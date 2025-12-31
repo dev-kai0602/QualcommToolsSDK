@@ -11,28 +11,36 @@ import json
 import logging
 from xml.etree import ElementTree
 from enum import Enum
+import os, sys
 
 from struct import unpack, pack
 from binascii import hexlify, unhexlify
-import os, sys
+import null
 
-current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-sys.path.insert(0, parent_dir)
-try:
-    from Library.utils import print_progress, read_object, write_object, LogBase
-    from Library.Connection.usblib import usb_class
-    from Library.Connection.seriallib import serial_class
-    from Library.hdlc import hdlc
-    from Config.usb_ids import default_diag_vid_pid
-except:
-    from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
-    from edlclient.Library.Connection.usblib import usb_class
-    from edlclient.Library.Connection.seriallib import serial_class
-    from edlclient.Library.hdlc import hdlc
-    from edlclient.Config.usb_ids import default_diag_vid_pid
+# 原来的导入方式
+# current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+# parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# sys.path.insert(0, parent_dir)
+# try:
+#     from Library.utils import print_progress, read_object, write_object, LogBase
+#     from Library.Connection.usblib import usb_class
+#     from Library.Connection.seriallib import serial_class
+#     from Library.hdlc import hdlc
+#     from Config.usb_ids import default_diag_vid_pid
+# except ImportError:
+#     from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
+#     from edlclient.Library.Connection.usblib import usb_class
+#     from edlclient.Library.Connection.seriallib import serial_class
+#     from edlclient.Library.hdlc import hdlc
+#     from edlclient.Config.usb_ids import default_diag_vid_pid
 
-qcerror = {
+from Library.utils import print_progress, read_object, write_object, LogBase
+from Library.Connection.usblib import usb_class
+from Library.Connection.seriallib import serial_class
+from Library.hdlc import hdlc
+from Config.usb_ids import default_diag_vid_pid
+
+errors = {
     1: "None",
     2: "Unknown",
     3: "Open Port Fail",
@@ -90,7 +98,17 @@ subnvitem_type = [
 ]
 
 
-class fs_factimage_read_info:
+class FactImageReadInfo:
+    """
+    用于表示从FactImage读取的信息的类。
+
+    Args:
+        stream_state (int): 流状态，0 表示没有更多数据要发送，否则设置为 1。
+        info_cluster_sent (int): 信息簇是否已发送，0 表示未发送，否则为 1。
+        cluster_map_seqno (int): 簇映射页的序列号。
+        cluster_data_seqno (int): 簇数据页的序列号。
+        
+    """
     def_fs_factimage_read_info = [
         ("stream_state", "B"),  # 0 indicates no more data to be sent, otherwise set to 1
         ("info_cluster_sent", "B"),  # 0 indicates if info_cluster was not sent, else 1
@@ -98,20 +116,34 @@ class fs_factimage_read_info:
         ("cluster_data_seqno", "I")  # Sequence number of cluster data pages
     ]
 
-    def __init__(self, stream_state, info_cluster_sent, cluster_map_seqno, cluster_data_seqno):
+    def __init__(self, stream_state: int, info_cluster_sent: int, cluster_map_seqno: int, cluster_data_seqno: int):
         self.stream_state = stream_state
         self.info_cluster_sent = info_cluster_sent
         self.cluster_map_seqno = cluster_map_seqno
         self.cluster_data_seqno = cluster_data_seqno
 
-    def fromdata(self, data):
+    def analysis_data(self, data: bytes):
+        """
+        从二进制数据中解析 FactImageReadInfo 对象。
+
+        Args:
+            data (bytes): 包含 FactImageReadInfo 数据的二进制数据。
+            
+        """
         tmp = read_object(data[0:0x10], self.def_fs_factimage_read_info)
         self.stream_state = tmp["stream_state"]
         self.info_cluster_sent = tmp["info_cluster_sent"]
         self.cluster_map_seqno = tmp["cluster_map_seqno"]
         self.cluster_data_seqno = tmp["cluster_data_seqno"]
 
-    def todata(self):
+    def to_data(self) -> bytes:
+        """
+        将 FactImageReadInfo 对象转换为二进制数据。
+
+        Returns:
+            bytes: 表示 FactImageReadInfo 对象的二进制数据。
+            
+        """
         data = write_object(self.def_fs_factimage_read_info, self.stream_state, self.info_cluster_sent,
                             self.cluster_map_seqno, self.cluster_data_seqno)
         return data
@@ -327,28 +359,33 @@ FS_DIAG_MAX_READ_REQ = 1024
 # define DIAG_NV_WRITE_F 0x27
 # define DIAG_NV_READ_F 0x26
 
-class qcdiag(metaclass=LogBase):
-    def __init__(self, loglevel, portconfig, ep_in=-1, ep_out=-1):
+class QualcommDiagClient(metaclass=LogBase):
+    def __init__(self, portconfig, ep_in=-1, ep_out=-1, loglevel: int = logging.DEBUG, encoding: str = 'utf-8', enabled_print: bool = False, enabled_log: bool = False):
         self.portconfig = portconfig
         self.nvlist = {}
         self.ep_in = ep_in
         self.ep_out = ep_out
-        self.__logger.setLevel(loglevel)
         self.portname = ""
-        if loglevel == logging.DEBUG:
-            logfilename = "log.txt"
-            fh = logging.FileHandler(logfilename)
-            self.__logger.addHandler(fh)
-        import os, inspect
-        current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-        try:
-            parent_dir = os.path.dirname(os.path.dirname(current_dir))
-            nvxml = os.path.join(parent_dir, "edlclient", "Config", "nvitems.xml")
-            e = ElementTree.parse(nvxml).getroot()
-        except:
+        self.enabled_print = enabled_print
+        self.enabled_log = enabled_log
+        self.encoding = encoding
+        if self.enabled_log:
+            self.__logger.setLevel(loglevel)
+            
+            if loglevel == logging.DEBUG:
+                log_path = "log.txt"
+                fh = logging.FileHandler(log_path, encoding=self.encoding)
+                self.__logger.addHandler(fh)
+                
             current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-            nvxml = os.path.join(current_dir, "edlclient", "Config", "nvitems.xml")
-            e = ElementTree.parse(nvxml).getroot()
+            try:
+                parent_dir = os.path.dirname(os.path.dirname(current_dir))
+                nvxml = os.path.join(parent_dir, "edlclient", "Config", "nvitems.xml")
+                e = ElementTree.parse(nvxml).getroot()
+            except:
+                current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+                nvxml = os.path.join(current_dir, "edlclient", "Config", "nvitems.xml")
+                e = ElementTree.parse(nvxml).getroot()
         for atype in e.findall("nv"):
             name = atype.get("name")
             identifier = int(atype.get("id"))
@@ -706,7 +743,7 @@ class qcdiag(metaclass=LogBase):
             return False
 
         print("Reading EFS ....")
-        fefs = fs_factimage_read_info(0, 0, 0, 0)
+        fefs = FactImageReadInfo(0, 0, 0, 0)
 
         # EFS Cmd
         buf = pack("<BBBB", 0x4B, efsmethod, efs_cmds.EFS2_DIAG_PREP_FACT_IMAGE.value, 0x00)  # prepare factory image
@@ -749,7 +786,7 @@ class qcdiag(metaclass=LogBase):
         fh = FactoryHeader()
         if len(resp) > 0:
             write_handle.write(resp[0x10:-0x1])
-            fefs.fromdata(resp[0x8:0x10])
+            fefs.analysis_data(resp[0x8:0x10])
             fh.fromdata(resp[0x10:0x10 + (39 * 4)])
 
         old = 0
@@ -783,11 +820,11 @@ class qcdiag(metaclass=LogBase):
                 if dlen == 0x200 or dlen == 0x800:
                     if resp[0x0] == 0x4B:
                         write_handle.write(resp[0x10:0x10 + dlen])
-                        fefs.fromdata(resp[0x8:0x10])
+                        fefs.analysis_data(resp[0x8:0x10])
                     else:
                         if (resp[0x0] == 0x13) and (resp[0x1] == 0x62) and (len(resp) > 0x200):
                             write_handle.write(resp[0x14:-4])
-                            fefs.fromdata(resp[0xc:0x14])
+                            fefs.analysis_data(resp[0xc:0x14])
                             if fefs.stream_state == 0x0:
                                 break
                         else:
@@ -1202,12 +1239,12 @@ class DiagTools(metaclass=LogBase):
         connected = False
         diag = None
         if self.vid is None or self.pid is None:
-            diag = qcdiag(loglevel=self.__logger.level, portconfig=default_diag_vid_pid)
+            diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=default_diag_vid_pid)
             if self.serial:
                 diag.portname = self.portname
             connected = diag.connect(self.serial)
         else:
-            diag = qcdiag(loglevel=self.__logger.level, portconfig=[[self.vid, self.pid, self.interface]])
+            diag = QualcommDiagClient(loglevel=self.__logger.level, portconfig=[[self.vid, self.pid, self.interface]])
             if self.serial:
                 diag.portname = self.portname
             connected = diag.connect(self.serial)

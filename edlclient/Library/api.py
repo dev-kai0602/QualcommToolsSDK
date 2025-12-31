@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from typing import Any
 
 from .. import edl
 
@@ -57,12 +58,14 @@ class EDL_API:
 
     """
 
-    def __init__(self, args=None):
+    def __init__(self, args=None, enabled_print: bool = False, enabled_log: bool = False):
         if args is None:
             args = EDL_ARGS
         self.edl = None
         self.status = 0
         self.args = {**args}
+        self.enabled_print = enabled_print
+        self.enabled_log = enabled_log
 
     def init(self) -> int:
         """ 初始化EDL实例并运行
@@ -71,7 +74,7 @@ class EDL_API:
             int: 状态码
 
         """
-        self.edl = edl.EDL(self.args)
+        self.edl = edl.EDL(self.args, enabled_log=self.enabled_log, enabled_print=self.enabled_print)
         self.status = self.edl.run()
         return self.status
 
@@ -101,13 +104,14 @@ class EDL_API:
             return self.status
         return self.init()
 
-    def set_arg(self, key: str, value, reset: bool = False):
+    def set_arg(self, key: str, value: Any, reset: bool = False):
         """
         设置参数值
 
         Args:
-            key: 参数键
-            value: 参数值
+            key (str): 参数键
+            value (Any): 参数值
+            reset (bool): 是否将 key 对应的值重置为默认值
 
         Returns:
             bool: 是否成功设置
@@ -174,17 +178,32 @@ class EDL_API:
         """
         return self.edl.fh.handle_firehose("memorydump", self.edl.args)
 
-    def print_gpt(self):
-        """打印GPT分区表信息
+    def print_gpt(self) -> bool:
+        """ 打印GPT分区表信息
 
-        读取并显示设备的GPT（GUID Partition Table）分区表信息，
+        打印设备的GPT（GUID Partition Table）分区表信息，
         包括分区名称、大小、起始扇区等。
 
         Returns:
-            int: 操作状态码，0表示成功，非0表示失败
+            bool: 指令是否执行成功
 
         """
-        return self.edl.fh.handle_firehose("printgpt", self.edl.args)
+        if self.enabled_print:
+            return self.edl.fh.handle_firehose("printgpt", self.edl.args)
+        else:
+            return False
+
+    def get_gpt(self) -> dict:
+        """ 获取GPT分区表信息
+
+        获取设备的GPT（GUID Partition Table）分区表信息，
+        包括分区名称、大小、起始扇区等。
+
+        Return:
+            dict: 分区表信息
+
+        """
+        return self.edl.fh.handle_firehose("getgpt", self.edl.args)
 
     def gpt(self, directory: str):
         """保存GPT分区表到指定目录
@@ -200,7 +219,7 @@ class EDL_API:
 
         """
         self.set_arg("<directory>", directory)
-        self.edl.fh.handle_firehose("printgpt", self.edl.args) # TODO: 该处会输出
+        # self.edl.fh.handle_firehose("printgpt", self.edl.args)
         return self.edl.fh.handle_firehose("gpt", self.edl.args)
 
     def r(self, partitionname: str, filename: str):
@@ -446,7 +465,7 @@ class EDL_API:
         """
         读取内存中的双字数据
 
-        从指定偏移地址读取一个双字（4字节）的数据。
+        从指定偏移地址读取一个双字(4字节)的数据。
 
         Args:
             offset (int): 开始读取的偏移地址

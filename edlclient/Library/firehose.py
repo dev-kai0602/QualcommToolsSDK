@@ -13,6 +13,7 @@ import platform
 from binascii import hexlify
 from queue import Queue
 from threading import Thread
+from typing import Tuple, Optional
 
 from edlclient.Library.Modules.nothing import nothing
 from edlclient.Library.gpt import gpt, AB_FLAG_OFFSET, AB_PARTITION_ATTR_SLOT_ACTIVE
@@ -751,7 +752,21 @@ class firehose(metaclass=LogBase):
         resp = rsp["value"] == "ACK"
         return response(resp=resp, data=resData, error=rsp[2])  # Do not remove, needed for oneplus
 
-    def get_gpt(self, lun, gpt_num_part_entries, gpt_part_entry_size, gpt_part_entry_start_lba, start_sector=1):
+    def get_gpt(self, lun: int, gpt_num_part_entries: int, gpt_part_entry_size: int, gpt_part_entry_start_lba: int, start_sector: int = 1) -> Tuple[bytes, Optional[nand_partition]]:
+        """
+        从指定的 LUN 中读取 GPT 表。
+
+        Args:
+            lun (int): 逻辑单元号 (LUN)。
+            gpt_num_part_entries (int): 分区条目数量。
+            gpt_part_entry_size (int): 每个分区条目的大小（以字节为单位）。
+            gpt_part_entry_start_lba (int): 分区条目起始逻辑块地址 (LBA)。
+            start_sector (int): 读取或写入操作时的起始扇区位置。
+
+        Returns:
+            Tuple[bytes, Optional[nand_partition]]: 返回包含 GPT 数据的字节串和解析后的 GPT 对象。
+                如果 GPT 表无法解析，则返回 (data, None)。
+        """
         try:
             resp = self.cmd_read_buffer(lun, 0, 1, False)
         except Exception as err:
