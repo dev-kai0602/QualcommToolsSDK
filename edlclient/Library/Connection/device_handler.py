@@ -28,7 +28,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
 
     Attribute:
         connected (bool): 设备连接状态标识，True表示已连接
-        timeout (int): USB通信默认超时时间（毫秒），默认值1000
+        time_out (int): USB通信默认超时时间（毫秒），默认值1000
         maxsize (int): 默认最大单次读取字节数，默认值512
         vid (int | None): USB设备厂商ID
         pid (int | None): USB设备产品ID
@@ -222,7 +222,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
                         try:
                             self.debug(pre + line.decode('utf-8'))
                             rdata += line + b"\n"
-                        except:
+                        except UnicodeDecodeError:
                             v = hexlify(line)
                             self.debug(pre + v.decode('utf-8'))
                     return rdata
@@ -236,7 +236,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
                 
         else:
             if logging.DEBUG >= self._logger.level:
-                self.debug(pre + hexlify(data).decode('utf-8'))
+                self.debug(pre + hexlify(data.encode('utf-8')).decode('utf-8'))
                 
         return data
     
@@ -382,7 +382,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
         pass
     
     @abc.abstractmethod
-    def usb_read(self, resp_len: int | Noen = None, timeout: int = 0):
+    def usb_read(self, resp_len: int | None = None, timeout: int = 0):
         """ 抽象方法：底层USB数据读取。
 
         Args:
@@ -400,7 +400,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
     
     @abc.abstractmethod
     def ctrl_transfer(self, request_type: int, request: int, value: int,
-                      index: int, data_or_wLength: bytes | int) -> bytes | int:
+                      index: int, data_or_length: bytes | int) -> bytes | int:
         """ 抽象方法：执行USB控制传输。
 
         Args:
@@ -408,7 +408,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
             request (int): USB请求码
             value (int): 请求参数值
             index (int): 请求索引值
-            data_or_wLength (bytes | int): 发送的数据（OUT请求）或接收长度（IN请求）
+            data_or_length (bytes | int): 发送的数据（OUT请求）或接收长度（IN请求）
 
         Returns:
             bytes | int: IN请求返回读取的数据，OUT请求返回发送的字节数
@@ -420,7 +420,7 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
         pass
     
     @abc.abstractmethod
-    def usb_read_write(self, data: bytes, resp_len: int) -> bytes: # TODO: What`s this?
+    def usb_read_write(self, data: bytes, resp_len: int) -> bytes:
         """ 抽象方法：USB读写一体化操作（发送数据并立即读取响应）。
 
         Args:
@@ -430,8 +430,6 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
         Returns:
             bytes: 设备返回的响应数据
 
-        待确认:
-            该方法的具体业务逻辑需进一步明确（TODO）
         """
         pass
     

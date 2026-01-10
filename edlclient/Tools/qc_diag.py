@@ -18,7 +18,7 @@ from binascii import hexlify, unhexlify
 
 from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
 from edlclient.Library.Connection.usblib import usb_class
-from edlclient.Library.Connection.seriallib import SerialDevice
+from edlclient.Library.Connection.serial_lib import SerialDevice
 from edlclient.Library.hdlc import hdlc
 from edlclient.Config.usb_ids import default_diag_vid_pid
 from edlclient.Tools import null

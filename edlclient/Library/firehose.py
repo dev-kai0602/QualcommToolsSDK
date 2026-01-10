@@ -271,7 +271,7 @@ class firehose(metaclass=LogBase):
         if not skipresponse:
             while b"<response value" not in rdata:
                 try:
-                    tmp = self.cdc.read(timeout=None)
+                    tmp = self.cdc.read(time_out=None)
                     if tmp == b"" in rdata:
                         counter += 1
                         time.sleep(0.05)
@@ -336,7 +336,7 @@ class firehose(metaclass=LogBase):
         try:
             v = None
             while v != b'':
-                v = self.cdc.read(timeout=None)
+                v = self.cdc.read(time_out=None)
                 if v != b'':
                     resp = self.xml.getlog(v)[0]
                 else:
@@ -370,7 +370,7 @@ class firehose(metaclass=LogBase):
         info = b""
         tmp = None
         while tmp != b"":
-            tmp = self.cdc.read(timeout=None)
+            tmp = self.cdc.read(time_out=None)
             if tmp == b"":
                 break
             info += tmp
@@ -456,7 +456,7 @@ class firehose(metaclass=LogBase):
         tmp = bytearray()
         timeout = 0
         while b'response value' not in tmp:
-            res = self.cdc.read(timeout=None)
+            res = self.cdc.read(time_out=None)
             if res == b'':
                 timeout += 1
                 if timeout == 4:
@@ -977,7 +977,7 @@ class firehose(metaclass=LogBase):
                     elif "WARN" in line:
                         self.warning(line)
         else:
-            info = self.cdc.read(timeout=1)
+            info = self.cdc.read(time_out=1)
             if isinstance(rsp.resp, dict):
                 field = rsp.resp
                 if "MemoryName" not in field:
@@ -1121,7 +1121,7 @@ class firehose(metaclass=LogBase):
                 for line in self.supported_functions:
                     info += line + ","
                 self.info(info[:-1])
-        data = self.cdc.read(timeout=None)
+        data = self.cdc.read(time_out=None)
         try:
             self.info(data.decode('utf-8'))
         except Exception as err:  # pylint: disable=broad-except
@@ -1138,7 +1138,7 @@ class firehose(metaclass=LogBase):
         if platform.system() == 'Windows':
             self.cdc.timeout = 50
         elif platform.system() == 'Darwin':
-            # must ensure the timeout is enough to fill the buffer we alloc
+            # must ensure the time_out is enough to fill the buffer we alloc
             # which is 1MB, othwise some data are dropped in the underlying usb libraries
             self.cdc.timeout = 50
         else:
@@ -1146,7 +1146,7 @@ class firehose(metaclass=LogBase):
         info = []
         while v != b'':
             try:
-                v = self.cdc.read(timeout=None)
+                v = self.cdc.read(time_out=None)
                 if (b"response" in v and b"</data>" in v) or v == b'':
                     break
                 data = self.xml.getlog(v)
@@ -1617,26 +1617,26 @@ class firehose(metaclass=LogBase):
             except Exception as err:  # pylint: disable=broad-except
                 self.debug(str(err))
                 pass
-            addrinfo = self.cdc.read(timeout=None)
+            addrinfo = self.cdc.read(time_out=None)
             if b"SizeInBytes" in addrinfo or b"Invalid parameters" in addrinfo:
                 tmp = b""
                 while b"NAK" not in tmp and b"ACK" not in tmp:
-                    tmp += self.cdc.read(timeout=None)
+                    tmp += self.cdc.read(time_out=None)
                 xdata = f"<?xml version=\"1.0\" ?><data><poke address64=\"{str(address + pos)}\" " + \
                         f"SizeInBytes=\"{str(maxsize)}\" value64=\"{content}\" /></data>\n"
                 self.cdc.write(xdata[:self.cfg.MaxXMLSizeInBytes])
-                addrinfo = self.cdc.read(timeout=None)
+                addrinfo = self.cdc.read(time_out=None)
                 if (b'<response' in addrinfo and 'NAK' in addrinfo) or b"Invalid parameters" in addrinfo:
                     self.error(f"Error:{addrinfo}")
                     return False
             if b"address" in addrinfo and b"can\'t" in addrinfo:
                 tmp = b""
                 while b"NAK" not in tmp and b"ACK" not in tmp:
-                    tmp += self.cdc.read(timeout=None)
+                    tmp += self.cdc.read(time_out=None)
                 self.error(f"Error:{addrinfo}")
                 return False
 
-            addrinfo = self.cdc.read(timeout=None)
+            addrinfo = self.cdc.read(time_out=None)
             if b'<response' in addrinfo and b'NAK' in addrinfo:
                 print(f"Error:{addrinfo}")
                 return False
@@ -1677,22 +1677,22 @@ class firehose(metaclass=LogBase):
         except Exception as err:  # pylint: disable=broad-except
             self.debug(str(err))
             pass
-        addrinfo = self.cdc.read(timeout=None)
+        addrinfo = self.cdc.read(time_out=None)
         if b"SizeInBytes" in addrinfo or b"Invalid parameters" in addrinfo:
             tmp = b""
             while b"NAK" not in tmp and b"ACK" not in tmp:
-                tmp += self.cdc.read(timeout=None)
+                tmp += self.cdc.read(time_out=None)
             data = f"<?xml version=\"1.0\" ?><data><peek address64=\"{hex(address)}\" " + \
                    f"SizeInBytes=\"{hex(SizeInBytes)}\" /></data>"
             self.cdc.write(data[:self.cfg.MaxXMLSizeInBytes])
-            addrinfo = self.cdc.read(timeout=None)
+            addrinfo = self.cdc.read(time_out=None)
             if (b'<response' in addrinfo and 'NAK' in addrinfo) or b"Invalid parameters" in addrinfo:
                 self.error(f"Error:{addrinfo}")
                 return False
         if b"address" in addrinfo and b"can\'t" in addrinfo:
             tmp = b""
             while b"NAK" not in tmp and b"ACK" not in tmp:
-                tmp += self.cdc.read(timeout=None)
+                tmp += self.cdc.read(time_out=None)
             self.error(f"Error:{addrinfo}")
             return False
 
@@ -1702,10 +1702,10 @@ class firehose(metaclass=LogBase):
         if info:
             print_progress(0, 100, prefix='Progress:', suffix='Complete', bar_length=50)
         while True:
-            received_data = self.cdc.read(timeout=None)
+            received_data = self.cdc.read(time_out=None)
             tmp = received_data
             while tmp[-7:] != b"</data>" and len(received_data) > 0:
-                received_data = self.cdc.read(timeout=None)
+                received_data = self.cdc.read(time_out=None)
                 tmp += received_data
             if b'<response' in tmp or b"ERROR" in tmp or len(received_data) == 0:
                 break

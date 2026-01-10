@@ -137,7 +137,7 @@ class hdlc:
         replybuf = bytearray()
         if timeout is None:
             timeout = self.timeout
-        tmp = self.cdc.read(timeout=timeout)
+        tmp = self.cdc.read(time_out=timeout)
         if tmp == bytearray():
             return b""
         if tmp == b"":
@@ -145,7 +145,7 @@ class hdlc:
         retry = 0
         while tmp[-1] != 0x7E:
             time.sleep(0.01)
-            tmp += self.cdc.read(timeout=timeout)
+            tmp += self.cdc.read(time_out=timeout)
             retry += 1
             if retry > 5:
                 break
@@ -161,7 +161,7 @@ class hdlc:
                 return -1
         else:
             time.sleep(0.01)
-            data = self.cdc.read(timeout=timeout)
+            data = self.cdc.read(time_out=timeout)
             if len(data) > 3:
                 crc16val = crc16(0xFFFF, data[:-3])
                 reccrc = int(data[-3]) + (int(data[-2]) << 8)
@@ -174,7 +174,7 @@ class hdlc:
         replybuf = bytearray()
         if timeout is None:
             timeout = self.timeout
-        tmp = self.cdc.read(timeout=timeout)
+        tmp = self.cdc.read(time_out=timeout)
         if tmp == bytearray():
             return b""
         if tmp == b"":
@@ -182,7 +182,7 @@ class hdlc:
         retry = 0
         while tmp[-1] != 0x7E:
             # time.sleep(0.05)
-            tmp += self.cdc.read(timeout=timeout)
+            tmp += self.cdc.read(time_out=timeout)
             retry += 1
             if retry > 5:
                 break
@@ -195,7 +195,7 @@ class hdlc:
             return data[:-3]
         else:
             time.sleep(0.5)
-            data = self.cdc.read(timeout=timeout)
+            data = self.cdc.read(time_out=timeout)
             if len(data) > 3:
                 # crc16val = self.crc16(0xFFFF, data[:-3])
                 # reccrc = int(data[-3]) + (int(data[-2]) << 8)

@@ -25,7 +25,7 @@ if not is_windows():
 from struct import pack
 
 try:
-    from edlclient.Library.Connection.devicehandler import DeviceClass
+    from edlclient.Library.Connection.device_handler import DeviceClass
 except:
     from Library.Connection.devicehandler import DeviceClass
 USB_DIR_OUT = 0  # to device
@@ -349,7 +349,7 @@ class usb_class(DeviceClass):
                 self.EP_OUT.write(b'')
             except usb.core.USBError as err:
                 error = str(err.strerror)
-                if "timeout" in error:
+                if "time_out" in error:
                     # time.sleep(0.01)
                     try:
                         self.EP_OUT.write(b'')

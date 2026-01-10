@@ -113,7 +113,7 @@ class sahara(metaclass=LogBase):
 
     def connect(self):
         try:
-            v = self.cdc.read(length=0xC * 0x4, timeout=1)
+            v = self.cdc.read(length=0xC * 0x4, time_out=1)
             if len(v) > 1:
                 if v[0] == 0x01:
                     pkt = self.ch.pkt_cmd_hdr(v)
@@ -133,7 +133,7 @@ class sahara(metaclass=LogBase):
             else:
                 data = b"<?xml version=\"1.0\" ?><data><nop /></data>"
                 self.cdc.write(data)
-                res = self.cdc.read(timeout=1)
+                res = self.cdc.read(time_out=1)
                 if b"<?xml" in res:
                     return {"mode": "firehose"}
                 elif len(res) > 0:
