@@ -178,7 +178,7 @@ class usb_class(DeviceClass):
             data_or_wLength=data, wIndex=1)
         self.debug("Linecoding set, {}b sent".format(wlen))
 
-    def setbreak(self):
+    def set_break(self):
         txdir = 0  # 0:OUT, 1:IN
         req_type = 1  # 0:std, 1:class, 2:vendor
         recipient = 1  # 0:device, 1:interface, 2:endpoint, 3:other
@@ -376,7 +376,7 @@ class usb_class(DeviceClass):
         self.verify_data(bytearray(command), "TX:")
         return True
 
-    def usbread(self, resplen=None, timeout=0):
+    def usb_read(self, resplen=None, timeout=0):
         if timeout == 0:
             timeout = 1
         if resplen is None:
@@ -435,7 +435,7 @@ class usb_class(DeviceClass):
         ids = [self.deviceclass(cfg.idVendor, cfg.idProduct) for cfg in dev]
         return ids
 
-    def usbwrite(self, data, pktsize=None):
+    def usb_write(self, data, pktsize=None):
         if pktsize is None:
             pktsize = len(data)
         res = self.write(data, pktsize)
@@ -443,9 +443,9 @@ class usb_class(DeviceClass):
         return res
 
     def usbreadwrite(self, data, resplen):
-        self.usbwrite(data)  # size
+        self.usb_write(data)  # size
         # port->flush()
-        res = self.usbread(resplen)
+        res = self.usb_read(resplen)
         return res
 
 

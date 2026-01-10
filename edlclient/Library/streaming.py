@@ -178,7 +178,7 @@ class Streaming(metaclass=LogBase):
         self.info("Entering flash mode ...")
         self.secure_mode()
         if not self.qclose(0):
-            data = self.cdc.usbread(timeout=0)
+            data = self.cdc.usb_read(timeout=0)
         if ptable is not None:
             if self.send_ptable(ptable, 0):  # 1 for fullflash
                 return True

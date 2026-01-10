@@ -607,7 +607,7 @@ class sahara(metaclass=LogBase):
                 pkt = res["data"]
                 data = pack("<III", cmd_t.SAHARA_EXECUTE_DATA, 0xC, mcmd)
                 self.cdc.write(data)
-                payload = self.cdc.usbread(pkt.data_len)
+                payload = self.cdc.usb_read(pkt.data_len)
                 return payload
             elif cmd == cmd_t.SAHARA_END_TRANSFER:
                 pkt = res["data"]

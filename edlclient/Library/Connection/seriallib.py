@@ -88,15 +88,18 @@ class SerialDevice(DeviceClass):
         if self.connected:
             self.close()
             self.connected = False
+            
         if port_name == "":
             devices = self.detect_devices()
             if len(devices) > 0:
                 port_name = devices[0]
+            else:
+                return False
+                
         if port_name != "":
             self.device = serial.Serial(baudrate=115200, bytesize=serial.EIGHTBITS,
                                         parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
-                                        timeout=50,
-                                        xonxoff=False, dsrdtr=True, rtscts=True)
+                                        timeout=50, xonxoff=False, dsrdtr=True, rtscts=True)
             self.device._reset_input_buffer = _reset_input_buffer
             self.device.setPort(port=port_name)
             self.device.open()
@@ -104,6 +107,7 @@ class SerialDevice(DeviceClass):
             self.connected = self.device.is_open
             if self.connected:
                 return True
+            
         return False
 
     def close(self, reset=False):
@@ -143,7 +147,7 @@ class SerialDevice(DeviceClass):
         self.device.bytesize = databits
         self.debug("Linecoding set")
 
-    def setbreak(self):
+    def set_break(self):
         self.device.send_break()
         self.debug("Break set")
 
@@ -212,12 +216,12 @@ class SerialDevice(DeviceClass):
         if self.xml_read:
             if length > self.device.in_waiting:
                 length = self.device.in_waiting
-        return self.usbread(length, timeout)
+        return self.usb_read(length, timeout)
 
     def flush(self):
         return self.device.flush()
 
-    def usbread(self, resplen=None, timeout=0):
+    def usb_read(self, resplen=None, timeout=0):
         if resplen is None:
             resplen = self.device.in_waiting
         if resplen <= 0:
@@ -265,7 +269,7 @@ class SerialDevice(DeviceClass):
                 self.verify_data(res[:resplen], "RX:")
         return res[:resplen]
 
-    def usbwrite(self, data, pktsize=None):
+    def usb_write(self, data, pktsize=None):
         if pktsize is None:
             pktsize = len(data)
         res = self.write(data, pktsize)
@@ -273,7 +277,7 @@ class SerialDevice(DeviceClass):
         return res
 
     def usbreadwrite(self, data, resplen):
-        self.usbwrite(data)  # size
+        self.usb_write(data)  # size
         self.device.flush()
-        res = self.usbread(resplen)
+        res = self.usb_read(resplen)
         return res
