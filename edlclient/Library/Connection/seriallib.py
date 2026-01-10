@@ -6,53 +6,99 @@
 # !!!!! If you use this code in commercial products, your product is automatically
 # GPLv3 and has to be open sourced under GPLv3 as well. !!!!!
 import sys
-
+import logging
+# 跨平台串口缓冲区刷新适配（类Unix系统需termios）
 if not sys.platform.startswith('win32'):
     import termios
-
-
-def _reset_input_buffer():
-    return
-
-
-def _reset_input_buffer_org(self):
-    if not sys.platform.startswith('win32'):
-        return termios.tcflush(self.fd, termios.TCIFLUSH)
-
 
 import serial
 import serial.tools.list_ports
 import inspect
 
-try:
-    from edlclient.Library.utils import *
-    from edlclient.Library.Connection.devicehandler import DeviceClass
-except:
-    from Library.utils import *
-    from Library.Connection.devicehandler import DeviceClass
+from edlclient.Library.utils import *
+from edlclient.Library.Connection.devicehandler import DeviceClass
 
 
-class serial_class(DeviceClass):
+def _reset_input_buffer():
+    """ 空实现的串口输入缓冲区重置函数（临时替换用）.
 
-    def __init__(self, loglevel=logging.INFO, portconfig=None, devclass=-1):
-        super().__init__(loglevel, portconfig, devclass)
-        self.is_serial = True
+    用于连接串口时临时覆盖pyserial的_reset_input_buffer方法，规避系统兼容性问题。
+    
+    """
+    pass
 
-    def connect(self, EP_IN=-1, EP_OUT=-1, portname: str = ""):
+
+def _reset_input_buffer_org(self):
+    """ 类Unix系统原生的串口输入缓冲区重置实现.
+
+    Args:
+        self: serial.Serial实例对象
+        
+    """
+    if not sys.platform.startswith('win32'):
+        termios.tcflush(self.fd, termios.TCIFLUSH)
+
+
+class SerialDevice(DeviceClass):
+    """ 串口通信设备类，继承自DeviceClass，实现跨平台串口通信核心逻辑.
+
+    支持串口连接管理、设备自动检测、串口参数配置、数据读写、控制线操作等功能，
+    兼容Windows/类Unix系统，适配指定VID/PID的USB串口设备。
+
+    Attributes:
+        is_serial (bool): 标记当前设备类型为串口设备
+        device (serial.Serial): pyserial串口实例对象
+        connected (bool): 串口连接状态标识
+        log_level (int): 日志级别（如logging.INFO/logging.DEBUG）
+        port_config (list): 串口设备VID/PID配置列表，格式[(vid1, pid1), (vid2, pid2)]
+        dev_class (int): 设备类型标识
+        xml_read (bool): 是否启用XML格式数据特殊解析模式
+        timeout (int): 默认读写超时时间（秒）
+        
+    """
+    
+    def __init__(self, log_level: int = logging.INFO, port_config = None, dev_class: int =-1,
+                 enabled_log: bool = False, enabled_print: bool = False):
+        """ 初始化SerialClass实例.
+
+        Args:
+            log_level (int, optional): 日志级别，默认logging.INFO
+            port_config (list, optional): 串口设备VID/PID配置列表，默认None
+            dev_class (int, optional): 设备类型标识，默认-1
+            enabled_log (bool, optional): 是否启用日志功能, 默认为False(不开启)
+            enabled_print (bool, optional): 是否启用输出功能，默认为False(不开启)
+            
+        """
+        super().__init__(log_level, port_config, dev_class, enabled_log, enabled_print)
+        self.is_serial: bool = True
+
+    def connect(self, port_name: str = ""):
+        """ 建立串口连接.
+
+        若未指定端口名，自动检测匹配VID/PID的串口设备；已连接时先关闭旧连接。
+        串口参数默认配置：波特率115200、8位数据位、无校验、1位停止位、超时50秒。
+
+        Args:
+            port_name (str, optional): 串口端口名（如COM3、/dev/ttyUSB0），默认空字符串
+
+        Returns:
+            bool: 连接成功返回True，失败返回False
+            
+        """
         if self.connected:
             self.close()
             self.connected = False
-        if portname == "":
-            devices = self.detectdevices()
+        if port_name == "":
+            devices = self.detect_devices()
             if len(devices) > 0:
-                portname = devices[0]
-        if portname != "":
+                port_name = devices[0]
+        if port_name != "":
             self.device = serial.Serial(baudrate=115200, bytesize=serial.EIGHTBITS,
                                         parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
                                         timeout=50,
                                         xonxoff=False, dsrdtr=True, rtscts=True)
             self.device._reset_input_buffer = _reset_input_buffer
-            self.device.setPort(port=portname)
+            self.device.setPort(port=port_name)
             self.device.open()
             self.device._reset_input_buffer = _reset_input_buffer_org
             self.connected = self.device.is_open
@@ -61,22 +107,36 @@ class serial_class(DeviceClass):
         return False
 
     def close(self, reset=False):
+        """ 关闭串口连接.
+
+        Args:
+            reset (bool, optional): 重置标记（未使用），默认False
+            
+        """
         if self.connected:
             self.device.close()
             del self.device
             self.connected = False
 
-    def detectdevices(self):
+    def detect_devices(self):
+        """ 检测系统中匹配VID/PID的串口设备.
+
+        遍历所有可用串口，筛选出port_config中指定VID/PID的设备，返回排序后的端口名列表。
+
+        Returns:
+            list: 匹配的串口端口名列表（如['/dev/ttyUSB0', '/dev/ttyUSB1']）
+            
+        """
         ids = []
         for port in serial.tools.list_ports.comports():
-            for usbid in self.portconfig:
+            for usbid in self.port_config:
                 if port.pid == usbid[1] and port.vid == usbid[0]:
-                    portid = port.location[-1:]
+                    port_id = port.location[-1:]
                     print(f"Detected {hex(port.vid)}:{hex(port.pid)} device at: " + port.device)
                     ids.append(port.device)
         return sorted(ids)
 
-    def setLineCoding(self, baudrate=None, parity=0, databits=8, stopbits=1):
+    def set_line_coding(self, baudrate=None, parity=0, databits=8, stopbits=1):
         self.device.baudrate = baudrate
         self.device.parity = parity
         self.device.stopbbits = stopbits
@@ -149,7 +209,7 @@ class serial_class(DeviceClass):
             length = self.device.in_waiting
             if length == 0:
                 return b""
-        if self.xmlread:
+        if self.xml_read:
             if length > self.device.in_waiting:
                 length = self.device.in_waiting
         return self.usbread(length, timeout)
@@ -167,7 +227,7 @@ class serial_class(DeviceClass):
         self.device.timeout = timeout
         epr = self.device.read
         extend = res.extend
-        if self.xmlread:
+        if self.xml_read:
             info = self.device.read(6)
             bytestoread = resplen - len(info)
             extend(info)

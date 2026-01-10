@@ -2,53 +2,137 @@
 # -*- coding: utf-8 -*-
 from typing import Any
 
-from .. import edl
+from edlclient import edl
 
-EDL_ARGS = {
+default_edl_args = {
+    # -------------------------- 调试/基础配置类参数 --------------------------
     "--debugmode": False,
-    "--devicemodel": None,
-    "--genxml": False,
-    "--gpt-num-part-entries": "0",
-    "--gpt-part-entry-size": "0",
-    "--gpt-part-entry-start-lba": "0",
-    "--loader": "None",
-    "--lun": None,
-    "--maxpayload": "0x100000",
-    "--memory": None,
-    "--partitionfilename": None,
-    "--partitions": None,
-    "--pid": "-1",
-    "--port_name": None,
-    "--resetmode": None,
-    "--sectorsize": None,
-    "--serial": False,
-    "--serial_number": None,
-    "--skip": None,
-    "--skipresponse": False,
-    "--skipstorageinit": False,
-    "--skipwrite": False,
-    "--tcpport": "1340",
-    "--vid": "-1",
+    # 是否启用调试模式：开启后会输出详细的EDL交互日志（如命令收发、数据解析过程），便于定位问题
 
+    "--devicemodel": None,
+    # 设备型号：指定目标高通设备的型号（如"Pixel 6"），用于匹配对应设备的EDL配置和分区表
+
+    "--genxml": False,
+    # 是否生成XML配置文件：开启后会根据当前参数自动生成EDL操作所需的XML配置（如分区烧录的rawprogram.xml）
+
+    # -------------------------- GPT分区表配置类参数 --------------------------
+    "--gpt-num-part-entries": "0",
+    # GPT分区表的条目数量：指定GPT（GUID Partition Table）中分区条目的总数，0表示使用设备默认值
+
+    "--gpt-part-entry-size": "0",
+    # GPT分区条目的大小（字节）：单个GPT分区条目的长度，0表示使用设备默认的分区条目大小
+
+    "--gpt-part-entry-start-lba": "0",
+    # GPT分区条目起始LBA地址：LBA（Logical Block Address）是磁盘逻辑块地址，0表示使用设备默认起始地址
+
+    # -------------------------- 加载器/传输配置类参数 --------------------------
+    "--loader": "None",
+    # EDL加载器路径：指定高通设备进入EDL模式后加载的编程器（loader）文件路径（如"prog_emmc_firehose_8998.mbn"），None表示不加载
+
+    "--lun": None,
+    # 逻辑单元号（Logical Unit Number）：指定存储设备的LUN编号（如eMMC的LUN0/1），用于区分多存储单元设备
+
+    "--maxpayload": "0x100000",
+    # 最大有效载荷大小（十六进制）：EDL传输时单次数据包的最大长度，0x100000=1MB，是高通设备的常见默认值
+
+    # -------------------------- 设备硬件配置类参数 --------------------------
+    "--memory": None,
+    # 内存配置：指定设备内存类型/大小（如"8GB"），用于适配不同内存规格的设备EDL操作
+
+    "--sectorsize": None,
+    # 扇区大小（字节）：指定存储设备的物理扇区大小（如512/4096字节），None表示自动检测设备扇区大小
+
+    "--pid": "-1",
+    # USB产品ID（Product ID）：目标高通设备的USB PID，-1表示自动匹配已连接的EDL设备PID
+
+    "--vid": "-1",
+    # USB厂商ID（Vendor ID）：高通设备的USB VID（默认高通VID为0x05C6），-1表示自动匹配
+
+    "--serial_number": None,
+    # 设备序列号：指定目标设备的唯一序列号，用于区分多台同时连接的EDL设备
+
+    # -------------------------- 连接/通信配置类参数 --------------------------
+    "--port_name": None,
+    # 端口名称：串口/USB端口名称（如"/dev/ttyUSB0"或"COM3"），用于指定EDL通信的物理端口
+
+    "--serial": False,
+    # 是否使用串口通信：False表示使用USB通信（EDL默认），True表示切换为串口通信
+
+    "--tcpport": "1340",
+    # TCP端口号：EDL模式下网络调试/传输的TCP端口，默认1340，用于远程EDL操作
+
+    # -------------------------- 操作行为控制类参数 --------------------------
+    "--resetmode": None,
+    # 重置模式：指定EDL操作完成后的设备重置方式（如"cold"冷重启、"warm"热重启），None表示不重置
+
+    "--skip": None,
+    # 跳过操作：指定需要跳过的EDL步骤（如"storageinit"跳过存储初始化），None表示执行所有步骤
+
+    "--skipresponse": False,
+    # 是否跳过响应检查：True表示不等待设备的EDL命令响应，False表示校验每一步响应的正确性
+
+    "--skipstorageinit": False,
+    # 是否跳过存储初始化：True表示不初始化存储设备（eMMC/UFS），False表示执行存储初始化（EDL必选步骤）
+
+    "--skipwrite": False,
+    # 是否跳过写入操作：True表示仅校验数据不写入存储，False表示执行实际的烧录/写入操作
+
+    # -------------------------- 操作对象/参数占位符（无--前缀） --------------------------
     "<command>": None,
+    # EDL核心命令：指定要执行的EDL操作命令（如"flash"烧录、"read"读取、"erase"擦除、"boot"启动loader）
+
     "<data>": None,
+    # 原始数据：用于传输的二进制原始数据（如分区补丁数据、配置参数二进制流）
+
     "<directory>": None,
+    # 目录路径：指定文件操作的目标目录（如烧录文件所在的文件夹路径）
+
     "<filename>": None,
+    # 文件名：指定EDL操作的目标文件（如loader文件、镜像文件、XML配置文件路径）
+
     "<imagedir>": None,
+    # 镜像目录：指定多个镜像文件的存放目录（如批量烧录时的镜像文件夹）
+
     "<length>": None,
+    # 数据长度：指定读取/写入的数据长度（字节），用于精准读取/写入部分分区数据
+
     "<lun>": None,
+    # 逻辑单元号（占位符）：与--lun作用一致，作为命令行参数占位符单独传递
+
     "<offset>": None,
+    # 偏移量：指定存储设备中的数据偏移地址（字节），用于从指定位置开始读写
+
     "<options>": None,
+    # 扩展选项：EDL命令的扩展配置参数（如烧录时的校验选项、强制写入选项）
+
     "<partitionname>": None,
+    # 分区名称：指定目标分区名称（如"boot"、"system"、"userdata"），用于单分区操作
+
     "<patch>": None,
+    # 补丁文件：指定分区补丁文件路径（如用于修复分区的差分补丁）
+
     "<rawprogram>": None,
+    # RawProgram XML文件：指定高通烧录格式的XML文件（rawprogram.xml），定义分区烧录规则
+
     "<sectors>": None,
+    # 扇区数量：指定操作的扇区总数（如擦除100个扇区），与扇区大小配合计算数据量
+
     "<size>": None,
+    # 大小：指定操作的数据总大小（字节/MB/GB），如读取1GB的userdata分区数据
+
     "<slot>": None,
+    # 槽位号：安卓A/B分区槽位（如"a"、"b"），用于指定烧录/读取的分区槽位
+
     "<start_sector>": None,
+    # 起始扇区：指定操作的起始扇区编号，与sectors配合定位操作范围
+
     "<xmlfile>": None,
+    # XML文件路径：指定EDL操作的配置XML文件（如gpt.xml、rawprogram.xml）
+
     "<xmlstring>": None,
+    # XML字符串：直接传递XML配置内容（无需文件），用于动态生成临时配置
 }
+
 
 class EDL_API:
 
@@ -56,13 +140,13 @@ class EDL_API:
         """ EDL API类
 
         Args:
-            args (dict) = EDL_ARGS: 参数配置
+            args (dict) = default_edl_args: 参数配置
             enabled_print (bool) = False: 是否打印
             enabled_log (bool) = False: 是否开启日志功能:
 
         """
         if args is None:
-            args = EDL_ARGS
+            args = default_edl_args
         self.edl = None
         self.status = 0
         self.args = {**args}
@@ -124,7 +208,7 @@ class EDL_API:
             return 'Invalid key!'
 
         if reset:
-            value = EDL_ARGS[key]
+            value = default_edl_args[key]
 
         self.args[key] = value
         if self.edl is not None:

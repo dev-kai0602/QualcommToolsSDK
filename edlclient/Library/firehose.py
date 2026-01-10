@@ -260,7 +260,7 @@ class firehose(metaclass=LogBase):
 
     def xmlsend(self, data, skipresponse=False) -> response:
         self.cdc.flush()
-        self.cdc.xmlread = True
+        self.cdc.xml_read = True
         if isinstance(data, bytes) or isinstance(data, bytearray):
             self.cdc.write(data[:self.cfg.MaxXMLSizeInBytes])
         else:
@@ -646,7 +646,7 @@ class firehose(metaclass=LogBase):
                f" start_sector=\"{start_sector}\"/>\n</data>"
 
         rsp = self.xmlsend(data, self.skipresponse)
-        self.cdc.xmlread = False
+        self.cdc.xml_read = False
         time.sleep(0.01)
         if not rsp.resp:
             if display:
@@ -673,7 +673,7 @@ class firehose(metaclass=LogBase):
                     show_progress(prefix="Read", pos=total - bytestoread, total=total, display=display)
             self.rq.put(None)
             worker.join(60)
-            self.cdc.xmlread = True
+            self.cdc.xml_read = True
             wd = self.wait_for_data()
             info = self.xml.getlog(wd)
             rsp = self.xml.getresponse(wd)
@@ -709,7 +709,7 @@ class firehose(metaclass=LogBase):
         rsp = self.xmlsend(data, self.skipresponse)
         if "value" in rsp.data and rsp.data["value"] == "NAK":
             return rsp
-        self.cdc.xmlread = False
+        self.cdc.xml_read = False
         resData = bytearray()
         if not rsp.resp:
             if display:
@@ -726,7 +726,7 @@ class firehose(metaclass=LogBase):
                 bytestoread -= size
                 resData.extend(tmp)
                 progbar.show_progress(prefix="Read", pos=total - bytestoread, total=total, display=display)
-            self.cdc.xmlread = True
+            self.cdc.xml_read = True
             wd = self.wait_for_data()
             info = self.xml.getlog(wd)
             rsp = self.xml.getresponse(wd)

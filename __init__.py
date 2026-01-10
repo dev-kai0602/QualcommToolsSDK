@@ -4,6 +4,7 @@
 
 import sys, os
 
+# 临时把SDK路径加入python包搜索路径
 sdk_root_path = os.path.dirname(os.path.abspath(__file__))
 if sdk_root_path not in sys.path:
     sys.path.insert(0, sdk_root_path)

@@ -448,7 +448,7 @@ class LogBase(type):
             },
             "handlers": {
                 "root": {
-                    # "level": cls.__logger.level,
+                    # "level": cls._logger.level,
                     "formatter": "root",
                     "class": "logging.StreamHandler",
                     "stream": "ext://sys.stdout",

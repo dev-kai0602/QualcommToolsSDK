@@ -1,6 +1,9 @@
 # 该项目正在开发中...
 # EDL SDK - Qualcomm Firehose & Sahara Protocol Python SDK
 
+# TODO:
+* 成功运行API类测试用例[]
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ---

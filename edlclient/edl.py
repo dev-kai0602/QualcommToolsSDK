@@ -134,17 +134,17 @@ import subprocess
 import sys
 import time
 
-from Config.usb_ids import default_ids
-from Library.Connection.seriallib import serial_class
-from Library.Connection.usblib import usb_class
-from Library.firehose_client import firehose_client
-from Library.sahara import sahara
-from Library.sahara_defs import cmd_t, sahara_mode_t
-from Library.streaming import Streaming
-from Library.streaming_client import streaming_client
-from Library.utils import LogBase
-from Library.utils import is_windows
-from Tools import null
+from edlclient.Config.usb_ids import default_ids
+from edlclient.Library.Connection.seriallib import SerialDevice # TODO: At here
+from edlclient.Library.Connection.usblib import usb_class
+from edlclient.Library.firehose_client import firehose_client
+from edlclient.Library.sahara import sahara
+from edlclient.Library.sahara_defs import cmd_t, sahara_mode_t
+from edlclient.Library.streaming import Streaming
+from edlclient.Library.streaming_client import streaming_client
+from edlclient.Library.utils import LogBase
+from edlclient.Library.utils import is_windows
+from edlclient.Tools import null
 
 class EDL(metaclass=LogBase):
     """ EDL类
@@ -160,13 +160,13 @@ class EDL(metaclass=LogBase):
     def __init__(self, args, imported: bool = True, enabled_log: bool = False, enabled_print: bool = False):
 
         if enabled_log:
-            self.__logger = self._logger
-            self.info = self.__logger.info
-            self.debug = self.__logger.debug
-            self.error = self.__logger.error
-            self.warning = self.__logger.warning
+            self._logger = self._logger
+            self.info = self._logger.info
+            self.debug = self._logger.debug
+            self.error = self._logger.error
+            self.warning = self._logger.warning
         else:
-            self.__logger = null.NullObject()
+            self._logger = null.NullObject()
             self.info = null.null_function
             self.debug = null.null_function
             self.error = null.null_function
@@ -246,7 +246,7 @@ class EDL(metaclass=LogBase):
                 "setactiveslot",
                 "send", "xml", "rawxml", "reset", "nop", "modules", "memorydump", "provision", "qfil"]
         for cmd in cmds:
-            if unresolved_args[cmd]:
+            if unresolved_args.get(cmd, False):
                 parsed_cmd.append(cmd)
 
         return parsed_cmd
@@ -289,7 +289,7 @@ class EDL(metaclass=LogBase):
                 options[arg] = unresolved_options[arg]
         return options
 
-    def do_connect(self, loop: int) -> dict:
+    def connect(self, loop: int) -> dict:
         """ 连接设备
 
         Args:
@@ -301,7 +301,7 @@ class EDL(metaclass=LogBase):
         """
 
         while not self.cdc.connected:
-            self.cdc.connected = self.cdc.connect(portname=self.port_name)
+            self.cdc.connected = self.cdc.connect(port_name=self.port_name)
             if not self.cdc.connected:
                 self._stdout_write('.')
 
@@ -354,8 +354,12 @@ class EDL(metaclass=LogBase):
         else:
             sys.exit(status)
 
-    def run(self):
+    def run(self) -> int:
         """ 主执行方法，处理EDL设备连接、协议协商和命令执行
+        
+        Return:
+            int: 状态码
+            
         """
 
         if is_windows():
@@ -378,10 +382,10 @@ class EDL(metaclass=LogBase):
             if os.path.exists(log_file_name):
                 os.remove(log_file_name)
             self.fh = logging.FileHandler(log_file_name)
-            self.__logger.addHandler(self.fh)
-            self.__logger.setLevel(logging.DEBUG)
+            self._logger.addHandler(self.fh)
+            self._logger.setLevel(logging.DEBUG)
         else:
-            self.__logger.setLevel(logging.INFO)
+            self._logger.setLevel(logging.INFO)
 
         if self.args["--serial"]:
             self.serial = True
@@ -395,13 +399,13 @@ class EDL(metaclass=LogBase):
             self.port_name = ""
 
         if self.serial:
-            self.cdc = serial_class(loglevel=self.__logger.level, portconfig=port_config)
+            self.cdc = SerialDevice(log_level=self._logger.level, port_config=port_config)
         else:
             if self.args["--serial_number"]:
                 self.serial_number = self.args["--serial_number"]
-            self.cdc = usb_class(portconfig=port_config, loglevel=self.__logger.level, serial_number=self.serial_number)
+            self.cdc = usb_class(port_config=port_config, log_level=self._logger.level, serial_number=self.serial_number)
 
-        self.sahara = sahara(self.cdc, loglevel=self.__logger.level)
+        self.sahara = sahara(self.cdc, loglevel=self._logger.level)
 
         if self.args["--loader"] == 'None':
             self.info("Trying with no loader given ...")
@@ -413,7 +417,7 @@ class EDL(metaclass=LogBase):
 
         self.info("Waiting for the device")
         self.cdc.timeout = 1500
-        connect_info = self.do_connect(loop)
+        connect_info = self.connect(loop)
         mode = connect_info["mode"]
         try:
             version = connect_info.get("data").version
@@ -471,8 +475,8 @@ class EDL(metaclass=LogBase):
                             self.sahara.cmd_reset()
                             return self.exit(1)
         else:
-            if self.__logger.level != logging.DEBUG:
-                self.__logger.setLevel(logging.ERROR)
+            if self._logger.level != logging.DEBUG:
+                self._logger.setLevel(logging.ERROR)
         if mode == "error":
             self._print("Connection detected, quiting.")
             return self.exit(1)
@@ -482,7 +486,7 @@ class EDL(metaclass=LogBase):
             elif "nprg" in self.sahara.programmer.lower():
                 mode = "nandprg"
             if mode != "firehose":
-                streaming = Streaming(self.cdc, self.sahara, self.__logger.level)
+                streaming = Streaming(self.cdc, self.sahara, self._logger.level)
                 if streaming.connect(1):
                     self._print("Successfully uploaded programmer :)")
                     mode = "nandprg"
@@ -490,7 +494,7 @@ class EDL(metaclass=LogBase):
                     self._print("No suitable loader found :(")
                     return self.exit()
         if mode != "firehose":
-            sc = streaming_client(self.args, self.cdc, self.sahara, self.__logger.level, self._print)
+            sc = streaming_client(self.args, self.cdc, self.sahara, self._logger.level, self._print)
             cmd = self.parse_cmd(self.args)
             options = self.parse_option(self.args)
             if "load_" in mode:
@@ -504,7 +508,7 @@ class EDL(metaclass=LogBase):
             if cmd == 'provision':
                 self.args["--memory"] = 'ufs'
                 self.args["--skipstorageinit"] = 1
-            self.fh = firehose_client(self.args, self.cdc, self.sahara, self.__logger.level, self._print)
+            self.fh = firehose_client(self.args, self.cdc, self.sahara, self._logger.level, self._print)
             options = self.parse_option(self.args)
             if cmd != "" or self.imported:
                 self.info("Trying to connect to firehose loader ...")

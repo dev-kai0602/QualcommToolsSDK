@@ -25,7 +25,7 @@ from edlclient.Library.sahara_defs import ErrorDesc, cmd_t, exec_cmd_t, sahara_m
 class sahara(metaclass=LogBase):
     def __init__(self, cdc, loglevel):
         self.cdc = cdc
-        self.__logger = self.__logger
+        self.__logger = self._logger
         self.info = self.__logger.info
         self.debug = self.__logger.debug
         self.error = self.__logger.error

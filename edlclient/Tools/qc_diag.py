@@ -18,7 +18,7 @@ from binascii import hexlify, unhexlify
 
 from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
 from edlclient.Library.Connection.usblib import usb_class
-from edlclient.Library.Connection.seriallib import serial_class
+from edlclient.Library.Connection.seriallib import SerialDevice
 from edlclient.Library.hdlc import hdlc
 from edlclient.Config.usb_ids import default_diag_vid_pid
 from edlclient.Tools import null
@@ -39,7 +39,7 @@ errors = {
     13: "Erase rom failed",
     14: "Timeout",
     15: "Go cmd failed",
-    16: "Set baudrate failed",
+    16: "Set baud_rate failed",
     17: "Say hello failed",
     18: "Write port failed",
     19: "Failed to read nv",
@@ -846,9 +846,9 @@ class QualcommDiagClient(metaclass=LogBase):
 
         """
         if serial:
-            self.cdc = serial_class(self._logger.level if self.enabled_log else logging.DEBUG, portconfig=self.port_config) # TODO: 查看serial_class
+            self.cdc = SerialDevice(self._logger.level if self.enabled_log else logging.DEBUG, port_config=self.port_config) # TODO: 查看serial_class
         else:
-            self.cdc = usb_class(portconfig=self.port_config, loglevel=self._logger.level if self.enabled_log else logging.DEBUG) # TODO: 查看usb_class
+            self.cdc = usb_class(port_config=self.port_config, log_level=self._logger.level if self.enabled_log else logging.DEBUG) # TODO: 查看usb_class
         if self.cdc.connect(self.ep_in, self.ep_out, self.port_name):
             self.hdlc = hdlc(self.cdc)
             data = self.hdlc.receive_reply(timeout=0)

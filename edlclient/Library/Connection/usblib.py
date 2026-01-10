@@ -67,8 +67,8 @@ CDC_CMDS = {
 
 class usb_class(DeviceClass):
 
-    def __init__(self, loglevel=logging.INFO, portconfig=None, devclass=-1, serial_number=None):
-        super().__init__(loglevel, portconfig, devclass)
+    def __init__(self, log_level=logging.INFO, port_config=None, dev_class=-1, serial_number=None):
+        super().__init__(log_level, port_config, dev_class)
         self.serial_number = serial_number
         self.load_windows_dll()
         self.EP_IN = None
@@ -116,10 +116,10 @@ class usb_class(DeviceClass):
             self.debug(2, self.configuration)
             return self.configuration.bNumInterfaces
         else:
-            self.__logger.error("No device detected. Is it connected ?")
+            self._logger.error("No device detected. Is it connected ?")
         return 0
 
-    def setLineCoding(self, baudrate=None, parity=0, databits=8, stopbits=1):
+    def set_line_coding(self, baudrate=None, parity=0, databits=8, stopbits=1):
         sbits = {1: 0, 1.5: 1, 2: 2}
         dbits = {5, 6, 7, 8, 16}
         pmodes = {0, 1, 2, 3, 4}
@@ -129,7 +129,7 @@ class usb_class(DeviceClass):
         if stopbits is not None:
             if stopbits not in sbits.keys():
                 valid = ", ".join(str(k) for k in sorted(sbits.keys()))
-                raise ValueError("Valid stopbits are " + valid)
+                raise ValueError("Valid stop_bits are " + valid)
             self.stopbits = stopbits
         else:
             self.stopbits = 0
@@ -219,7 +219,7 @@ class usb_class(DeviceClass):
         self.EP_IN = None
         devices = usb.core.find(find_all=True, backend=self.backend)
         for dev in devices:
-            for usbid in self.portconfig:
+            for usbid in self.port_config:
                 if dev.idProduct == usbid[1] and dev.idVendor == usbid[0]:
                     if self.serial_number is not None:
                         if dev.serial_number != self.serial_number:
@@ -430,7 +430,7 @@ class usb_class(DeviceClass):
             self.vid = vid
             self.pid = pid
 
-    def detectdevices(self):
+    def detect_devices(self):
         dev = usb.core.find(find_all=True, backend=self.backend)
         ids = [self.deviceclass(cfg.idVendor, cfg.idProduct) for cfg in dev]
         return ids
@@ -535,7 +535,7 @@ class Scsi:
         self.loglevel = loglevel
 
     def connect(self):
-        self.usb = usb_class(loglevel=self.loglevel, portconfig=[self.vid, self.pid, self.interface], devclass=8)
+        self.usb = usb_class(log_level=self.loglevel, port_config=[self.vid, self.pid, self.interface], dev_class=8)
         if self.usb.connect():
             return True
         return False

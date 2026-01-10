@@ -51,7 +51,7 @@ class LogBase(type):
 
     def __init__(cls, *args):
         super().__init__(*args)
-        logger_attribute_name = "_" + cls.__name__ + "__logger"
+        logger_attribute_name = "_" + cls.__name__ + "_logger"
         logger_debuglevel_name = "_" + cls.__name__ + "__debuglevel"
         logger_name = ".".join([c.__name__ for c in cls.mro()[-2::-1]])
         log_config = {
@@ -65,7 +65,7 @@ class LogBase(type):
             },
             "handlers": {
                 "root": {
-                    # "level": cls.__logger.level,
+                    # "level": cls._logger.level,
                     "formatter": "root",
                     "class": "logging.StreamHandler",
                     "stream": "ext://sys.stdout",

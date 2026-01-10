@@ -23,7 +23,7 @@ except:
 
 class loader_utils(metaclass=LogBase):
     def __init__(self, loglevel=logging.INFO):
-        self.__logger = self.__logger
+        self.__logger = self._logger
         self.info = self.__logger.info
         self.debug = self.__logger.debug
         self.error = self.__logger.error
