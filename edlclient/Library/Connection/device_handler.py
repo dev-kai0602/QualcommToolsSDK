@@ -26,20 +26,20 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
     数据读写、参数配置、日志输出等核心能力的抽象定义与基础实现。子类需实现所有
     抽象方法以适配具体设备的通信逻辑。
 
-    Attribute:
+    Attributes:
         connected (bool): 设备连接状态标识，True表示已连接
         time_out (int): USB通信默认超时时间（毫秒），默认值1000
         maxsize (int): 默认最大单次读取字节数，默认值512
         vid (int | None): USB设备厂商ID
         pid (int | None): USB设备产品ID
         stop_bits (int | None): 串口停止位数量（1/1.5/2）
-        databits (int | None): 串口数据位数量（5/6/7/8）
+        data_bits (int | None): 串口数据位数量（5/6/7/8）
         parity (int | None): 串口校验位配置（0=无校验，1=奇校验，2=偶校验）
         baud_rate (int | None): 串口波特率（bps）
         configuration (int | None): USB设备配置值
         device (object | None): 底层设备操作句柄
         dev_class (int): 自定义设备分类标识，默认值-1
-        loglevel (int): 日志输出级别（参考logging模块常量）
+        log_level (int): 日志输出级别（参考logging模块常量）
         xml_read (bool): XML格式数据解析开关，默认开启（True）
         port_config (dict | None): 设备端口配置参数（设备专属）
         enabled_print (bool): 控制台输出开关，默认关闭（False）

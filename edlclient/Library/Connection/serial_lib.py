@@ -326,7 +326,7 @@ class SerialDevice(DeviceClass):
                 if 'timed out' in error:
                     if time_out is None:
                         return b''
-                    self.debug(f'Read timeout (current timeout: {time_out}s)')
+                    self.debug(f'Read time_out (current time_out: {time_out}s)')
                     if time_out == 10:
                         return b''
                     time_out += 1

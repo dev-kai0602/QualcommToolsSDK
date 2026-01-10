@@ -17,7 +17,7 @@ from struct import unpack, pack
 from binascii import hexlify, unhexlify
 
 from edlclient.Library.utils import print_progress, read_object, write_object, LogBase
-from edlclient.Library.Connection.usblib import usb_class
+from edlclient.Library.Connection.usblib import USBClass
 from edlclient.Library.Connection.serial_lib import SerialDevice
 from edlclient.Library.hdlc import hdlc
 from edlclient.Config.usb_ids import default_diag_vid_pid
@@ -848,7 +848,7 @@ class QualcommDiagClient(metaclass=LogBase):
         if serial:
             self.cdc = SerialDevice(self._logger.level if self.enabled_log else logging.DEBUG, port_config=self.port_config) # TODO: 查看serial_class
         else:
-            self.cdc = usb_class(port_config=self.port_config, log_level=self._logger.level if self.enabled_log else logging.DEBUG) # TODO: 查看usb_class
+            self.cdc = USBClass(port_config=self.port_config, log_level=self._logger.level if self.enabled_log else logging.DEBUG) # TODO: 查看usb_class
         if self.cdc.connect(self.ep_in, self.ep_out, self.port_name):
             self.hdlc = hdlc(self.cdc)
             data = self.hdlc.receive_reply(timeout=0)

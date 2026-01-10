@@ -23,57 +23,98 @@ from edlclient.Library.Connection.device_handler import DeviceClass
 if not is_windows():
     import usb.backend.libusb1
 
-USB_DIR_OUT = 0  # to device
-USB_DIR_IN = 0x80  # to host
+# -------------------------- 全局常量定义 --------------------------
+""" USB 传输方向常量 """
+USB_DIR_OUT = 0  # 数据输出到设备（主机->设备）
+USB_DIR_IN = 0x80  # 数据输入到主机（设备->主机）
 
-# USB types, the second of three bRequestType fields
+""" USB 请求类型掩码（bRequestType 字段第二位） """
 USB_TYPE_MASK = (0x03 << 5)
-USB_TYPE_STANDARD = (0x00 << 5)
-USB_TYPE_CLASS = (0x01 << 5)
-USB_TYPE_VENDOR = (0x02 << 5)
-USB_TYPE_RESERVED = (0x03 << 5)
+USB_TYPE_STANDARD = (0x00 << 5)  # 标准请求
+USB_TYPE_CLASS = (0x01 << 5)     # 类请求（如 CDC 类）
+USB_TYPE_VENDOR = (0x02 << 5)    # 厂商自定义请求
+USB_TYPE_RESERVED = (0x03 << 5)  # 保留类型
 
-# USB recipients, the third of three bRequestType fields
+""" USB 接收者掩码（bRequestType 字段第三位） """
 USB_RECIP_MASK = 0x1f
-USB_RECIP_DEVICE = 0x00
-USB_RECIP_INTERFACE = 0x01
-USB_RECIP_ENDPOINT = 0x02
-USB_RECIP_OTHER = 0x03
-# From Wireless USB 1.0
-USB_RECIP_PORT = 0x04
-USB_RECIP_RPIPE = 0x05
+USB_RECIP_DEVICE = 0x00      # 接收者：设备
+USB_RECIP_INTERFACE = 0x01   # 接收者：接口
+USB_RECIP_ENDPOINT = 0x02    # 接收者：端点
+USB_RECIP_OTHER = 0x03       # 接收者：其他
+USB_RECIP_PORT = 0x04        # 接收者：端口（无线 USB 1.0）
+USB_RECIP_RPIPE = 0x05       # 接收者：管道（无线 USB 1.0）
 
+""" USB 批量传输最大缓冲区大小 """
 MAX_USB_BULK_BUFFER_SIZE = 16384
 
+""" SCSI 命令全局标签（用于标识命令块） """
 tag = 0
 
+""" CDC 类核心命令集（通信设备类标准命令） """
 CDC_CMDS = {
-    "SEND_ENCAPSULATED_COMMAND": 0x00,
-    "GET_ENCAPSULATED_RESPONSE": 0x01,
-    "SET_COMM_FEATURE": 0x02,
-    "GET_COMM_FEATURE": 0x03,
-    "CLEAR_COMM_FEATURE": 0x04,
-    "SET_LINE_CODING": 0x20,
-    "GET_LINE_CODING": 0x21,
-    "SET_CONTROL_LINE_STATE": 0x22,
-    "SEND_BREAK": 0x23,  # value is break time
+    "SEND_ENCAPSULATED_COMMAND": 0x00,    # 发送封装命令
+    "GET_ENCAPSULATED_RESPONSE": 0x01,    # 获取封装响应
+    "SET_COMM_FEATURE": 0x02,             # 设置通信特性
+    "GET_COMM_FEATURE": 0x03,             # 获取通信特性
+    "CLEAR_COMM_FEATURE": 0x04,           # 清除通信特性
+    "SET_LINE_CODING": 0x20,              # 设置串口线编码（波特率/数据位等）
+    "GET_LINE_CODING": 0x21,              # 获取串口线编码
+    "SET_CONTROL_LINE_STATE": 0x22,       # 设置控制线路状态（RTS/DTR）
+    "SEND_BREAK": 0x23,                   # 发送中断信号（参数为中断时长）
 }
 
 
-class usb_class(DeviceClass):
+class USBClass(DeviceClass):
+    """
+    USB 设备通信核心类
+    封装 USB 设备连接、数据读写、控制传输、CDC 配置等核心功能，
+    继承自 DeviceClass（基础设备处理类），支持跨平台兼容。
 
-    def __init__(self, log_level=logging.INFO, port_config=None, dev_class=-1, serial_number=None):
-        super().__init__(log_level, port_config, dev_class)
+    Attributes:
+        serial_number (str): 设备序列号（用于精准匹配设备）
+        EP_IN (usb.core.Endpoint): 输入端点（设备->主机）
+        EP_OUT (usb.core.Endpoint): 输出端点（主机->设备）
+        is_serial (bool): 是否为串口设备
+        buffer (array.array): 数据接收缓冲区
+        backend (usb.backend): libusb 后端实例（跨平台适配）
+        device (usb.core.Device): 已连接的 USB 设备实例
+        configuration (usb.core.Configuration): 设备激活的配置
+        interface (int/usb.core.Interface): 设备接口号/接口实例
+        maxsize (int): 输入端点最大数据包长度
+        connected (bool): 设备是否已连接
+        
+    """
+
+    def __init__(self, log_level: int = logging.INFO, port_config: list | None = None, dev_class: int = -1,
+                 serial_number: str | None = None, enabled_log: bool = False, enabled_print: bool = False):
+        """ 初始化 USB 通信类
+
+        Args:
+            log_level (int): 日志级别（默认 logging.INFO）
+            port_config (list): 端口配置列表，格式 [(VID, PID, 接口号), ...]
+            dev_class (int): 设备类筛选（-1 表示不筛选）
+            serial_number (str): 设备序列号（精准匹配设备）
+            enabled_log – 是否启用日志记录功能，默认关闭
+            enabled_print – 是否启用控制台打印功能，默认关闭
+            
+        """
+        super().__init__(log_level, port_config, dev_class, enabled_log, enabled_print)
         self.serial_number = serial_number
-        self.load_windows_dll()
+        self.load_windows_dll() # Windows 平台加载 libusb DLL
         self.EP_IN = None
         self.EP_OUT = None
         self.is_serial = False
-        self.buffer = array.array('B', [0]) * 1048576
+        self.buffer = array.array('B', [0]) * 1048576 # 初始化 1MB 缓冲区
+        
+        # 跨平台 libusb 后端适配
         if sys.platform.startswith('freebsd') or sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
+            # Linux/macOS/FreeBSD 使用 libusb1 后端
             self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.so")
         elif is_windows():
+            # Windows 自动适配后端（依赖 DLL）
             self.backend = None
+            
+        # 尝试设置 libusb 选项（优化通信）
         if self.backend is not None:
             try:
                 self.backend.lib.libusb_set_option.argtypes = [c_void_p, c_int]
@@ -82,61 +123,99 @@ class usb_class(DeviceClass):
                 self.backend = None
 
     def load_windows_dll(self):
+        """
+        Windows 平台加载 libusb 动态库
+        自动添加 DLL 搜索路径，解决 Windows 下 libusb 依赖问题
+        
+        """
         if os.name == 'nt':
             windows_dir = None
             try:
                 # add pygame folder to Windows DLL search paths
+                # 拼接 Windows 平台 DLL 目录路径
                 windows_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "../..", "Windows")
                 try:
                     os.add_dll_directory(windows_dir)
                 except Exception:
                     pass
+                # 更新系统 PATH 环境变量
                 os.environ['PATH'] = windows_dir + ';' + os.environ['PATH']
-            except Exception:
-                pass
-            del windows_dir
+            except Exception as err:
+                self.debug(f"加载 Windows DLL 失败: {err}")
+            finally:
+                del windows_dir  # 释放临时变量
 
-    def get_interface_count(self):
+    def get_interface_count(self) -> int | bool:
+        """ 获取 USB 设备的接口数量
+
+        Returns:
+            int/false: 成功返回接口数量，失败返回 False
+            
+        """
         if self.vid is not None:
+            # 根据 VID/PID 查找设备
             self.device = usb.core.find(idVendor=self.vid, idProduct=self.pid, backend=self.backend)
             if self.device is None:
                 self.debug("Couldn't detect the device. Is it connected ?")
                 return False
+            
+            # 尝试设置设备配置
             try:
                 self.device.set_configuration()
             except Exception as err:
-                self.debug(str(err))
-                pass
+                self.debug(f"设置设备配置失败: {err}")
+            
+            # 获取激活的配置并返回接口数量
             self.configuration = self.device.get_active_configuration()
             self.debug(2, self.configuration)
             return self.configuration.bNumInterfaces
+        
         else:
             self._logger.error("No device detected. Is it connected ?")
+            
         return 0
 
-    def set_line_coding(self, baud_rate=None, parity=0, databits=8, stop_bits=1):
-        sbits = {1: 0, 1.5: 1, 2: 2}
-        dbits = {5, 6, 7, 8, 16}
-        pmodes = {0, 1, 2, 3, 4}
-        brates = {300, 600, 1200, 2400, 4800, 9600, 14400,
-                  19200, 28800, 38400, 57600, 115200, 230400}
+    def set_line_coding(self, baud_rate: int | None = None, parity: int = 0, data_bits: int = 8, stop_bits: float = 1):
+        """
+        设置 CDC 串口线编码（波特率、数据位、停止位、奇偶校验）
+        严格校验参数合法性，仅支持标准串口参数
 
+        Args:
+            baud_rate (int): 波特率（仅支持 300/9600/115200 等标准值）
+            parity (int): 奇偶校验（0=无校验,1=奇校验,2=偶校验,3=标记,4=空格）
+            data_bits (int): 数据位（5/6/7/8/16）
+            stop_bits (float): 停止位（1/1.5/2）
+
+        Raises:
+            ValueError: 参数不在合法范围内时抛出
+            
+        """
+        # 合法参数映射表
+        sbits = {1: 0, 1.5: 1, 2: 2}       # 停止位映射（协议值）
+        dbits = {5, 6, 7, 8, 16}            # 合法数据位
+        pmodes = {0, 1, 2, 3, 4}            # 合法奇偶校验模式
+        brates = {300, 600, 1200, 2400, 4800, 9600, 14400,
+                  19200, 28800, 38400, 57600, 115200, 230400}  # 合法波特率
+        
+        # 校验停止位
         if stop_bits is not None:
             if stop_bits not in sbits.keys():
                 valid = ", ".join(str(k) for k in sorted(sbits.keys()))
                 raise ValueError("Valid stop_bits are " + valid)
-            self.stopbits = stop_bits
+            self.stop_bits = stop_bits
         else:
-            self.stopbits = 0
-
-        if databits is not None:
-            if databits not in dbits:
+            self.stop_bits = 0
+        
+        # 校验数据位
+        if data_bits is not None:
+            if data_bits not in dbits:
                 valid = ", ".join(str(d) for d in sorted(dbits))
-                raise ValueError("Valid databits are " + valid)
-            self.databits = databits
+                raise ValueError("Valid data_bits are " + valid)
+            self.data_bits = data_bits
         else:
-            self.databits = 0
-
+            self.data_bits = 0
+        
+        # 校验奇偶校验
         if parity is not None:
             if parity not in pmodes:
                 valid = ", ".join(str(pm) for pm in sorted(pmodes))
@@ -144,29 +223,33 @@ class usb_class(DeviceClass):
             self.parity = parity
         else:
             self.parity = 0
-
+        
+        # 校验波特率（自动推荐最近合法值）
         if baud_rate is not None:
             if baud_rate not in brates:
                 brs = sorted(brates)
                 dif = [abs(br - baud_rate) for br in brs]
                 best = brs[dif.index(min(dif))]
-                raise ValueError(
-                    "Invalid baudrates, nearest valid is {}".format(best))
-            self.baudrate = baud_rate
-
+                raise ValueError("Invalid baudrates, nearest valid is {}".format(best))
+            self.baud_rate = baud_rate
+        
+        # 构造线编码数据（按 CDC 协议格式）
         linecode = [
-            self.baudrate & 0xff,
-            (self.baudrate >> 8) & 0xff,
-            (self.baudrate >> 16) & 0xff,
-            (self.baudrate >> 24) & 0xff,
-            sbits[self.stopbits],
+            self.baud_rate & 0xff,
+            (self.baud_rate >> 8) & 0xff,
+            (self.baud_rate >> 16) & 0xff,
+            (self.baud_rate >> 24) & 0xff,
+            sbits[self.stop_bits],
             self.parity,
-            self.databits]
+            self.data_bits]
 
-        txdir = 0  # 0:OUT, 1:IN
-        req_type = 1  # 0:std, 1:class, 2:vendor
-        recipient = 1  # 0:device, 1:interface, 2:endpoint, 3:other
+        # 构造控制传输请求类型
+        txdir = 0  # 输出方向（主机->设备）
+        req_type = 1  # 类请求
+        recipient = 1  # 接收者：接口
         req_type = (txdir << 7) + (req_type << 5) + recipient
+        
+        # 发送控制传输设置线编码
         data = bytearray(linecode)
         wlen = self.device.ctrl_transfer(
             req_type, CDC_CMDS["SET_LINE_CODING"],
@@ -174,51 +257,102 @@ class usb_class(DeviceClass):
         self.debug("Linecoding set, {}b sent".format(wlen))
 
     def set_break(self):
-        txdir = 0  # 0:OUT, 1:IN
-        req_type = 1  # 0:std, 1:class, 2:vendor
-        recipient = 1  # 0:device, 1:interface, 2:endpoint, 3:other
+        """
+        发送 CDC 中断信号（SEND_BREAK 命令）
+        用于串口中断控制，如触发设备重置/唤醒
+        
+        """
+        # 构造控制传输请求类型
+        txdir = 0  # 输出方向
+        req_type = 1  # 类请求
+        recipient = 1  # 接收者：接口
         req_type = (txdir << 7) + (req_type << 5) + recipient
+        
+        # 发送控制传输
         wlen = self.device.ctrl_transfer(
             request_type=req_type, request=CDC_CMDS["SEND_BREAK"],
             value=0, data_or_wLength=0, index=1)
         self.debug("Break set, {}b sent".format(wlen))
 
-    def set_control_line_state(self, RTS=None, DTR=None, isFTDI=False):
-        ctrlstate = (2 if RTS else 0) + (1 if DTR else 0)
-        if isFTDI:
-            ctrlstate += (1 << 8) if DTR is not None else 0
-            ctrlstate += (2 << 8) if RTS is not None else 0
-        txdir = 0  # 0:OUT, 1:IN
-        req_type = 2 if isFTDI else 1  # 0:std, 1:class, 2:vendor
-        # 0:device, 1:interface, 2:endpoint, 3:other
-        recipient = 0 if isFTDI else 1
-        req_type = (txdir << 7) + (req_type << 5) + recipient
+    def set_control_line_state(self, RTS: bool = None, DTR: bool = None, isFTDI: bool = False):
+        """
+        设置 CDC 控制线路状态（RTS/DTR 信号）
+        适配 FTDI 芯片与标准 CDC 设备的差异
 
+        Args:
+            RTS (bool): RTS 信号状态（True=启用，False=禁用）
+            DTR (bool): DTR 信号状态（True=启用，False=禁用）
+            isFTDI (bool): 是否为 FTDI 芯片设备（特殊处理）
+            
+        """
+        # 计算控制状态值（标准 CDC）
+        ctrl_state = (2 if RTS else 0) + (1 if DTR else 0)
+        
+        # FTDI 芯片特殊处理
+        if isFTDI:
+            ctrl_state += (1 << 8) if DTR is not None else 0
+            ctrl_state += (2 << 8) if RTS is not None else 0
+            
+        # 构造请求类型（区分 FTDI 与标准 CDC）
+        txdir = 0  # 输出方向
+        req_type = 2 if isFTDI else 1  # FTDI 使用厂商请求，标准 CDC 使用类请求
+        recipient = 0 if isFTDI else 1  # FTDI 接收者为设备，标准 CDC 为接口
+        req_type = (txdir << 7) + (req_type << 5) + recipient
+        
+        # 发送控制传输
         wlen = self.device.ctrl_transfer(
             request_type=req_type,
             request=1 if isFTDI else CDC_CMDS["SET_CONTROL_LINE_STATE"],
-            value=ctrlstate,
+            value=ctrl_state,
             index=1,
             data_or_wLength=0)
         self.debug("Linecoding set, {}b sent".format(wlen))
 
     def flush(self):
-        return
+        """
+        刷新缓冲区（占位方法，暂无实现）
+        用于兼容串口设备的缓冲区刷新逻辑
+        """
+        pass
 
-    def connect(self, EP_IN=-1, EP_OUT=-1, portname: str = ""):
+    def connect(self, EP_IN: int = -1, EP_OUT: int = -1, port_name: str = ""):
+        """
+        连接 USB 设备
+        1. 枚举系统 USB 设备，匹配 VID/PID/序列号
+        2. 查找 IN/OUT 端点（自动/指定）
+        3. 分离内核驱动，占用设备接口
+        4. 标记设备为已连接状态
+
+        Args:
+            EP_IN (int): 指定输入端点号（-1 表示自动查找）
+            EP_OUT (int): 指定输出端点号（-1 表示自动查找）
+            port_name (str): 端口名（占位参数，暂无使用）
+
+        Returns:
+            bool: 连接成功返回 True，失败返回 False
+            
+        """
+        # 若已连接，先关闭旧连接
         if self.connected:
             self.close()
             self.connected = False
+        
+        # 重置设备/端点状态
         self.device = None
         self.EP_OUT = None
         self.EP_IN = None
+        
+        # 枚举系统所有 USB 设备
         devices = usb.core.find(find_all=True, backend=self.backend)
         for dev in devices:
+            # 匹配端口配置中的 VID/PID
             for usbid in self.port_config:
                 if dev.idProduct == usbid[1] and dev.idVendor == usbid[0]:
+                    # 匹配序列号（若指定）
                     if self.serial_number is not None:
                         if dev.serial_number != self.serial_number:
                             continue
+                    # 匹配成功，记录设备信息
                     self.device = dev
                     self.vid = dev.idVendor
                     self.pid = dev.idProduct
@@ -227,124 +361,150 @@ class usb_class(DeviceClass):
                     break
             if self.device is not None:
                 break
-
+        
+        # 设备未找到
         if self.device is None:
             self.debug("Couldn't detect the device. Is it connected ?")
             return False
-
+        
+        # 获取设备配置（处理未设置配置的情况）
         try:
             self.configuration = self.device.get_active_configuration()
-        except usb.core.USBError as e:
-            if e.strerror == "Configuration not set":
+            
+        except usb.core.USBError as err:
+            if str(err) == 'Configuration not set':
                 self.device.set_configuration()
                 self.configuration = self.device.get_active_configuration()
-            if e.errno == 13:
+            # Linux 权限问题处理
+            if err.errno == 13:
                 self.error("Permission denied accessing {:04x}:{:04x}.".format(self.vid,self.pid))
                 self.info("Potential fix (update udev rules): sudo echo 'SUBSYSTEM==\"usb\",ATTRS{{idVendor}}==\"{:04x}\",ATTRS{{idProduct}}==\"{:04x}\",MODE=\"0666\"' >> /etc/udev/rules.d/99-edl.rules".format(self.vid,self.pid))
+                # 切换到 libusb0 后端重试
                 self.backend = usb.backend.libusb0.get_backend()
                 self.device = usb.core.find(idVendor=self.vid, idProduct=self.pid, backend=self.backend)
+        
+        # 配置获取失败
         if self.configuration is None:
             self.error("Couldn't get device configuration.")
             return False
+        
+        # 校验接口号合法性
         if self.interface > self.configuration.bNumInterfaces:
             print("Invalid interface, max number is %d" % self.configuration.bNumInterfaces)
             return False
+        
+        # 查找匹配的接口和端点
         for itf in self.configuration:
-            if self.devclass == -1:
-                self.devclass = 0xFF
-            if itf.bInterfaceClass == self.devclass:
+            # 筛选设备类（-1 表示不筛选）
+            if self.dev_class == -1:
+                self.dev_class = 0xFF
+            if itf.bInterfaceClass == self.dev_class:
                 if self.interface == -1 or self.interface == itf.bInterfaceNumber:
                     self.interface = itf
                     self.EP_OUT = EP_OUT
                     self.EP_IN = EP_IN
+                    # 遍历端点，匹配 IN/OUT 方向
                     for ep in itf:
                         edir = usb.util.endpoint_direction(ep.bEndpointAddress)
+                        # 匹配输出端点
                         if (edir == usb.util.ENDPOINT_OUT and EP_OUT == -1) or ep.bEndpointAddress == (EP_OUT & 0xF):
                             self.EP_OUT = ep
+                        # 匹配输入端点
                         elif (edir == usb.util.ENDPOINT_IN and EP_IN == -1) or ep.bEndpointAddress == (EP_OUT & 0xF):
                             self.EP_IN = ep
                     break
-
+        
+        # 端点匹配成功，初始化设备
         if self.EP_OUT is not None and self.EP_IN is not None:
             self.maxsize = self.EP_IN.wMaxPacketSize
+            # 分离内核驱动（若已加载）
             try:
                 if self.device.is_kernel_driver_active(0):
                     self.debug("Detaching kernel driver")
                     self.device.detach_kernel_driver(0)
             except Exception as err:
                 self.debug("No kernel driver supported: " + str(err))
-
+            
+            # 占用设备接口
             try:
                 usb.util.claim_interface(self.device, 0)
-            except:
+            except Exception:
                 pass
-            """
-            self.debug(self.configuration)
-            if self.interface != 0:
-                try:
-                    usb.util.claim_interface(self.device, 0)
-                except:
-                    try:
-                        if self.device.is_kernel_driver_active(0):
-                            self.debug("Detaching kernel driver")
-                            self.device.detach_kernel_driver(0)
-                    except Exception as err:
-                        self.debug("No kernel driver supported: " + str(err))
-                    try:
-                        usb.util.claim_interface(self.device, 0)
-                    except:
-                        pass
-            try:
-                    usb.util.claim_interface(self.device, self.interface)
-            except:
-                try:
-                    if self.device.is_kernel_driver_active(self.interface):
-                        self.debug("Detaching kernel driver")
-                        self.device.detach_kernel_driver(self.interface)
-                except Exception as err:
-                    self.debug("No kernel driver supported: " + str(err))
-                try:
-                    if self.interface != 0:
-                        usb.util.claim_interface(self.device, self.interface)
-                except:
-                    pass
-            """
+            
+            # 标记为已连接
             self.connected = True
             return True
-        print("Couldn't find CDC interface. Aborting.")
+        
+        # 未找到 CDC 接口
+        self._print("Couldn't find CDC interface. Aborting.")
         self.connected = False
         return False
 
-    def close(self, reset=False):
+    def close(self, reset: bool = False):
+        """
+        关闭 USB 设备连接
+        1. 释放设备资源
+        2. 可选重置设备
+        3. 恢复内核驱动（避免设备占用）
+
+        Args:
+            reset (bool): 是否重置设备（默认 False）
+            
+        """
         if self.connected:
             try:
+                # 重置设备（若指定）
                 if reset:
                     self.device.reset()
+                # 恢复内核驱动（仅当未激活时）
                 if not self.device.is_kernel_driver_active(self.interface):
-                    # self.device.attach_kernel_driver(self.interface) #Do NOT uncomment
                     self.device.attach_kernel_driver(0)
+                    
             except Exception as err:
                 self.debug(str(err))
-                pass
+            
+            # 释放 USB 资源
             usb.util.dispose_resources(self.device)
             del self.device
+            
+            # 重置后延迟（避免设备未就绪）
             if reset:
                 time.sleep(2)
             self.connected = False
 
-    def write(self, command, data_pack_size=None):
+    def write(self, command: str | bytes, data_pack_size: int = None) -> bool:
+        """
+        批量写数据到 USB 设备
+        1. 支持字符串/字节数据自动转换
+        2. 分块发送（默认 16384 字节）
+        3. 异常重试（最多 3 次）
+
+        Args:
+            command (str/bytes): 要发送的数据
+            data_pack_size (int): 分块大小（默认 MAX_USB_BULK_BUFFER_SIZE）
+
+        Returns:
+            bool: 发送成功返回 True，失败返回 False
+            
+        """
+        # 默认分块大小
         if data_pack_size is None:
             # data_pack_size = self.EP_OUT.wMaxPacketSize
             data_pack_size = MAX_USB_BULK_BUFFER_SIZE
+        
+        # 字符串转字节
         if isinstance(command, str):
             command = bytes(command, 'utf-8')
+            
         pos = 0
+        # 空数据处理
         if command == b'':
             try:
                 self.EP_OUT.write(b'')
             except usb.core.USBError as err:
                 error = str(err.strerror)
                 if "time_out" in error:
+                    # 超时重试
                     # time.sleep(0.01)
                     try:
                         self.EP_OUT.write(b'')
@@ -352,52 +512,75 @@ class usb_class(DeviceClass):
                         self.debug(str(err))
                         return False
                 return True
+            
         else:
-            i = 0
+            # 分块发送数据
+            retry = 0
             while pos < len(command):
                 try:
+                    # 发送当前块数据
                     ctr = self.EP_OUT.write(command[pos:pos + data_pack_size])
                     if ctr <= 0:
                         self.info(ctr)
                     pos += data_pack_size
+                    retry = 0  # 重置重试计数
+                    
                 except Exception as err:
                     self.debug(str(err))
                     # print("Error while writing")
                     # time.sleep(0.01)
-                    i += 1
-                    if i == 3:
+                    retry += 1
+                    if retry == 3:
                         return False
-                    pass
+        
+        # 校验发送数据（调试模式）
         self.verify_data(bytearray(command), "TX:")
         return True
 
-    def usb_read(self, resp_len=None, timeout=0):
-        if timeout == 0:
-            timeout = 1
+    def usb_read(self, resp_len: int = None, time_out: int = 1) -> bytes:
+        """
+        从 USB 设备批量读数据
+        1. 按最大包长拼接数据
+        2. 处理超时/溢出等异常
+        3. 调试模式下打印数据
+
+        Args:
+            resp_len (int): 期望读取长度（默认端点最大包长）
+            time_out (int): 超时时间（秒，0 表示默认 1 秒）
+
+        Returns:
+            bytes: 读取到的数据（失败返回空字节）
+            
+        """
+        # 默认读取长度为端点最大包长
         if resp_len is None:
             resp_len = self.maxsize
+        # 校验读取长度
         if resp_len <= 0:
             self.info("Warning !")
+            
         res = bytearray()
         loglevel = self.loglevel
         buffer = self.buffer[:resp_len]
         epr = self.EP_IN.read
         extend = res.extend
+        
+        # 循环读取直到满足长度
         while len(res) < resp_len:
             try:
-                resp_len = epr(buffer, timeout)
+                resp_len = epr(buffer, time_out)
                 extend(buffer[:resp_len])
                 if resp_len == self.EP_IN.wMaxPacketSize:
                     break
             except usb.core.USBError as e:
                 error = str(e.strerror)
                 if "timed out" in error:
-                    if timeout is None:
+                    if time_out is None:
                         return b""
                     self.debug("Timed out")
-                    if timeout == 10:
+                    if time_out == 10:
                         return b""
-                    timeout += 1
+                    time_out += 1
                     pass
                 elif "Overflow" in error:
                     self.error("USB Overflow")
@@ -530,7 +713,7 @@ class Scsi:
         self.loglevel = loglevel
 
     def connect(self):
-        self.usb = usb_class(log_level=self.loglevel, port_config=[self.vid, self.pid, self.interface], dev_class=8)
+        self.usb = USBClass(log_level=self.loglevel, port_config=[self.vid, self.pid, self.interface], dev_class=8)
         if self.usb.connect():
             return True
         return False

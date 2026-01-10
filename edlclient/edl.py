@@ -136,7 +136,7 @@ import time
 
 from edlclient.Config.usb_ids import default_ids
 from edlclient.Library.Connection.serial_lib import SerialDevice
-from edlclient.Library.Connection.usblib import usb_class # TODO: AT here
+from edlclient.Library.Connection.usblib import USBClass # TODO: AT here
 from edlclient.Library.firehose_client import firehose_client
 from edlclient.Library.sahara import sahara
 from edlclient.Library.sahara_defs import cmd_t, sahara_mode_t
@@ -403,7 +403,7 @@ class EDL(metaclass=LogBase):
         else:
             if self.args["--serial_number"]:
                 self.serial_number = self.args["--serial_number"]
-            self.cdc = usb_class(port_config=port_config, log_level=self._logger.level, serial_number=self.serial_number)
+            self.cdc = USBClass(port_config=port_config, log_level=self._logger.level, serial_number=self.serial_number)
 
         self.sahara = sahara(self.cdc, loglevel=self._logger.level)
 
