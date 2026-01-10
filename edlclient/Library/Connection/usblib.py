@@ -442,10 +442,10 @@ class usb_class(DeviceClass):
         # port->flush()
         return res
 
-    def usb_read_write(self, data, resplen):
+    def usb_read_write(self, data, resp_len):
         self.usb_write(data)  # size
         # port->flush()
-        res = self.usb_read(resplen)
+        res = self.usb_read(resp_len)
         return res
 
 

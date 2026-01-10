@@ -420,12 +420,12 @@ class DeviceClass(abc.ABC, metaclass=LogBase):
         pass
     
     @abc.abstractmethod
-    def usb_read_write(self, data: bytes, resplen: int) -> bytes: # TODO: What`s this?
+    def usb_read_write(self, data: bytes, resp_len: int) -> bytes: # TODO: What`s this?
         """ 抽象方法：USB读写一体化操作（发送数据并立即读取响应）。
 
         Args:
             data (bytes): 待发送的请求数据
-            resplen (int): 期望读取的响应字节数
+            resp_len (int): 期望读取的响应字节数
 
         Returns:
             bytes: 设备返回的响应数据
