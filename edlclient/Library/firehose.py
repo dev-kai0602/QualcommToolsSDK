@@ -172,6 +172,7 @@ class firehose(metaclass=LogBase):
         num_physical = 0
         block_size = 0
         SECTOR_SIZE_IN_BYTES = 0
+        PAGES_PER_BLOCK = 0
         MemoryName = "eMMC"
         prod_name = "Unknown"
         maxlun = 99
@@ -465,6 +466,11 @@ class firehose(metaclass=LogBase):
             tmp += res
         return tmp
 
+    def nand_pages_attr(self):
+        if self.cfg.MemoryName.lower() == "nand" and self.cfg.PAGES_PER_BLOCK:
+            return f" PAGES_PER_BLOCK=\"{self.cfg.PAGES_PER_BLOCK}\""
+        return ""
+
     def cmd_program(self, physical_partition_number, start_sector, filename, display=True):
         total = os.stat(filename).st_size
         sparse = QCSparse(filename, self.loglevel)
@@ -487,7 +493,8 @@ class firehose(metaclass=LogBase):
                    f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                    f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                    f" physical_partition_number=\"{physical_partition_number}\"" + \
-                   f" start_sector=\"{start_sector}\" "
+                   f" start_sector=\"{start_sector}\""
+            data += self.nand_pages_attr() + " "
             if self.modules is not None:
                 data += self.modules.addprogram()
             data += f"/>\n</data>"
@@ -542,7 +549,8 @@ class firehose(metaclass=LogBase):
                f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
-               f" start_sector=\"{start_sector}\" "
+               f" start_sector=\"{start_sector}\""
+        data += self.nand_pages_attr() + " "
         if self.modules is not None:
             data += self.modules.addprogram()
         data += f"/>\n</data>"
@@ -590,11 +598,28 @@ class firehose(metaclass=LogBase):
             self.info(f"\nErasing from physical partition {str(physical_partition_number)}, " +
                       f"sector {str(start_sector)}, sectors {str(num_partition_sectors)}")
 
+        if "erase" in self.supported_functions:
+            data = f"<?xml version=\"1.0\" ?><data>\n" + \
+                   f"<erase SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
+                   f" num_partition_sectors=\"{num_partition_sectors}\"" + \
+                   f" physical_partition_number=\"{physical_partition_number}\"" + \
+                   f" start_sector=\"{start_sector}\""
+            data += self.nand_pages_attr() + " "
+            if self.modules is not None:
+                data += self.modules.addprogram()
+            data += f"/>\n</data>"
+            rsp = self.xmlsend(data, self.skipresponse)
+            if rsp.resp:
+                return True
+            self.error(f"Error:{rsp.error}")
+            return False
+
         data = f"<?xml version=\"1.0\" ?><data>\n" + \
                f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
-               f" start_sector=\"{start_sector}\" "
+               f" start_sector=\"{start_sector}\""
+        data += self.nand_pages_attr() + " "
         if self.modules is not None:
             data += self.modules.addprogram()
         data += f"/>\n</data>"
@@ -643,7 +668,8 @@ class firehose(metaclass=LogBase):
         data = f"<?xml version=\"1.0\" ?><data><read SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
-               f" start_sector=\"{start_sector}\"/>\n</data>"
+               f" start_sector=\"{start_sector}\""
+        data += self.nand_pages_attr() + "/>\n</data>"
 
         rsp = self.xmlsend(data, self.skipresponse)
         self.cdc.xml_read = False
@@ -703,7 +729,8 @@ class firehose(metaclass=LogBase):
         data = f"<?xml version=\"1.0\" ?><data><read SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
-               f" start_sector=\"{start_sector}\"/>\n</data>"
+               f" start_sector=\"{start_sector}\""
+        data += self.nand_pages_attr() + "/>\n</data>"
 
         progbar = progress(self.cfg.SECTOR_SIZE_IN_BYTES)
         rsp = self.xmlsend(data, self.skipresponse)
@@ -786,14 +813,14 @@ class firehose(metaclass=LogBase):
             self.info("Scanning for partition table ...")
             progbar = progress(1)
             if self.nandpart.partitiontblsector is None:
-                for sector in [0x280,0x400]:
+                for sector in [0x280,0x400,0x800]:
                     progbar.show_progress(prefix="Scanning", pos=sector, total=1024, display=True)
                     resp = self.cmd_read_buffer(0, sector, 1, False)
                     if resp.resp:
                         if resp.data[0:8] in [b"\xac\x9f\x56\xfe\x7a\x12\x7f\xcd", b"\xAA\x73\xEE\x55\xDB\xBD\x5E\xE3"]:
                             progbar.show_progress(prefix="Scanning", pos=1024, total=1024, display=True)
                             self.nandpart.partitiontblsector = sector
-                            if sector == 0x400:
+                            if sector == 0x400 or sector == 0x800:
                                 self.nandpart.largesector = True
                             self.info(f"Found partition table at sector {sector} :)")
                             break
@@ -890,7 +917,10 @@ class firehose(metaclass=LogBase):
                      f"MaxPayloadSizeToTargetInBytes=\"{str(self.cfg.MaxPayloadSizeToTargetInBytes)}\" " + \
                      f"ZLPAwareHost=\"{str(self.cfg.ZLPAwareHost)}\" " + \
                      f"SkipStorageInit=\"{str(int(self.cfg.SkipStorageInit))}\" " + \
-                     f"SkipWrite=\"{str(int(self.cfg.SkipWrite))}\"/>" + \
+                     f"SkipWrite=\"{str(int(self.cfg.SkipWrite))}\""
+        if self.cfg.MemoryName.lower() == "nand" and self.cfg.PAGES_PER_BLOCK:
+            connectcmd += f" PAGES_PER_BLOCK=\"{str(self.cfg.PAGES_PER_BLOCK)}\""
+        connectcmd += "/>" + \
                      "</data>"
         '''
         "<?xml version=\"1.0\" encoding=\"UTF-8\" ?><data><response value=\"ACK\" MinVersionSupported=\"1\"" \
@@ -1535,12 +1565,13 @@ class firehose(metaclass=LogBase):
                                             slot_a_status, slot_b_status,
                                             lun_a, lun_b)
 
-                            # TODO: this updates the backup gpt header, but is it needed, since it is updated when xbl loads
-                            #update_gpt_info(backup_guid_gpt_a, backup_guid_gpt_b,
-                            #                partitionname_a, partitionname_b,
-                            #                backup_gpt_data_a, backup_gpt_data_b,
-                            #                slot_a_status, slot_b_status,
-                            #                lun_a, lun_b)
+                            # update the backup gpt header as well, depending on the xbl implementation in case of
+                            # discording GPTs the backup may be used, thus negating the switch
+                            update_gpt_info(backup_guid_gpt_a, backup_guid_gpt_b,
+                                            partitionname_a, partitionname_b,
+                                            backup_gpt_data_a, backup_gpt_data_b,
+                                            slot_a_status, slot_b_status,
+                                            lun_a, lun_b)
 
         except Exception as err:
             self.error(str(err))
