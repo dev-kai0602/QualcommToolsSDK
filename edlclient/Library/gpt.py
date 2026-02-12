@@ -6,7 +6,6 @@
 # !!!!! If you use this code in commercial products, your product is automatically
 # GPLv3 and has to be open sourced under GPLv3 as well. !!!!!
 import argparse
-import copy
 import logging
 import logging.config
 import os
@@ -16,96 +15,7 @@ from binascii import hexlify
 from enum import Enum
 from struct import calcsize, unpack, pack
 
-import colorama
-
-
-class ColorFormatter(logging.Formatter):
-    LOG_COLORS = {
-        logging.ERROR: colorama.Fore.RED,
-        logging.DEBUG: colorama.Fore.LIGHTMAGENTA_EX,
-        logging.WARNING: colorama.Fore.YELLOW,
-    }
-
-    def format(self, record, *args, **kwargs):
-        # if the corresponding logger has children, they may receive modified
-        # record, so we want to keep it intact
-        new_record = copy.copy(record)
-        if new_record.levelno in self.LOG_COLORS:
-            pad = ""
-            if new_record.name != "root":
-                print(new_record.name)
-                pad = "[LIB]: "
-            # we want levelname to be in different color, so let"s modify it
-            new_record.msg = "{pad}{color_begin}{msg}{color_end}".format(
-                pad=pad,
-                msg=new_record.msg,
-                color_begin=self.LOG_COLORS[new_record.levelno],
-                color_end=colorama.Style.RESET_ALL,
-            )
-        # now we can let standart formatting take care of the rest
-        return super(ColorFormatter, self).format(new_record, *args, **kwargs)
-
-
-class LogBase(type):
-    debuglevel = logging.root.level
-
-    def __init__(cls, *args):
-        super().__init__(*args)
-        logger_debuglevel_name = "_" + cls.__name__ + "__debuglevel"
-        logger_name = ".".join([c.__name__ for c in cls.mro()[-2::-1]])
-        log_config = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "root": {
-                    "()": ColorFormatter,
-                    "format": "%(name)s - %(message)s",
-                }
-            },
-            "handlers": {
-                "root": {
-                    # "level": cls._logger.level,
-                    "formatter": "root",
-                    "class": "logging.StreamHandler",
-                    "stream": "ext://sys.stdout",
-                }
-            },
-            "loggers": {
-                "": {
-                    "handlers": ["root"],
-                    # "level": cls.debuglevel,
-                    "propagate": False
-                }
-            },
-        }
-        logging.config.dictConfig(log_config)
-        logger = logging.getLogger(logger_name)
-
-        setattr(cls, '_logger', logger)
-        setattr(cls, '_debuglevel', cls.debuglevel)
-        cls.logsetup = logsetup
-
-
-def logsetup(self, logger, loglevel):
-    self.info = logger.info
-    self.debug = logger.debug
-    self.error = logger.error
-    self.warning = logger.warning
-    if loglevel == logging.DEBUG:
-        logfilename = os.path.join("logs", "log.txt")
-        if os.path.exists(logfilename):
-            try:
-                os.remove(logfilename)
-            except:
-                pass
-        fh = logging.FileHandler(logfilename, encoding="utf-8")
-        logger.addHandler(fh)
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.setLevel(logging.INFO)
-    self.log_level = loglevel
-    return logger
-
+from edlclient.Library.base import LogBase
 
 def read_object(data: object, definition: object) -> object:
     """

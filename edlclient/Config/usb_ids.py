@@ -6,6 +6,12 @@
 # !!!!! If you use this code in commercial products, your product is automatically
 # GPLv3 and has to be open sourced under GPLv3 as well. !!!!!
 
+__test_startic = False # 当所有数据均测试，请后把这个值设为 True
+
+if __name__ != '__main__' and __test_startic:
+    import os
+    print(f'\033[1;31m [ERROR] {os.path.basename(__file__)} 中的数据未测试，请测试所有数据并把 __test_startic 的值设为 True. \033[0m')
+
 # TODO: 该数据为原项目给出的数据，有待验证
 # 默认USB设备标识列表（基础版，均无特殊配置参数）
 # 格式：[厂商ID(VID), 产品ID(PID), 配置参数(-1表示无)]
